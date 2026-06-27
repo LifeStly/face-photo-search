@@ -1,22 +1,24 @@
-import '@tensorflow/tfjs-node';
-import * as faceapi from '@vladmandic/face-api';
-import * as canvas from 'canvas';
-import sharp from 'sharp';
 import path from 'node:path';
 import { config } from './config';
 
-const { Canvas, Image, ImageData } = canvas as any;
-faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
+type Faceapi = typeof import('@vladmandic/face-api');
+type CanvasMod = typeof import('canvas');
 
-let _ready: Promise<void> | null = null;
+let _ready: Promise<{ faceapi: Faceapi; canvas: CanvasMod }> | null = null;
 
-export function ready(): Promise<void> {
+function ready() {
   if (_ready) return _ready;
   _ready = (async () => {
+    await import('@tensorflow/tfjs-node');
+    const faceapi = await import('@vladmandic/face-api');
+    const canvas = await import('canvas');
+    const { Canvas, Image, ImageData } = canvas as any;
+    faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
     const dir = path.resolve(config.face.modelsPath);
     await faceapi.nets.ssdMobilenetv1.loadFromDisk(dir);
     await faceapi.nets.faceLandmark68Net.loadFromDisk(dir);
     await faceapi.nets.faceRecognitionNet.loadFromDisk(dir);
+    return { faceapi, canvas };
   })();
   return _ready;
 }
@@ -27,7 +29,8 @@ export type Embedding = {
 };
 
 export async function embedImage(input: Buffer): Promise<Embedding[]> {
-  await ready();
+  const { faceapi, canvas } = await ready();
+  const sharp = (await import('sharp')).default;
   const resized = await sharp(input)
     .rotate()
     .resize({ width: config.face.resizeWidth, withoutEnlargement: true })

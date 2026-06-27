@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-27 (รอบ 4 — แก้ web build แตก)
+- `apps/web/lib/face.ts` — ย้าย `@tensorflow/tfjs-node`, `@vladmandic/face-api`, `canvas`, `sharp` จาก top-level import เป็น dynamic import ใน `ready()`/`embedImage()` เพราะ `next build` จะ spawn worker (`isPageStatic`) โหลดทุก route module ตอน build — ถ้า route import face.ts แล้ว tfjs-node native addon load ไม่ผ่านบน bookworm-slim worker จะตายเงียบเป็น `Promise.all (index N)` rejection
+- เพิ่ม `.dockerignore` ที่ root — กัน `node_modules`/`.next`/`secrets`/`*.sqlite` จาก host หลุดเข้า build context แล้วทับ deps ที่ install ใน base stage
+
 ## 2026-06-27 (รอบ 3 — bugfix)
 - แก้ build error ใน `apps/worker` — เพิ่ม `overrides` ใน `package.json` บังคับให้ bullmq ใช้ ioredis เวอร์ชันเดียวกับ project เพื่อแก้ TypeScript type conflict
 - แก้ `apps/worker/src/driveSync.ts` — สร้าง `driveSyncQueue()` แทนการใช้ `job.queue` ที่เป็น protected ใน BullMQ v5

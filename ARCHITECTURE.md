@@ -39,6 +39,7 @@ Canon EOS RP  ──WiFi──▶  image.canon  ──auto-forward──▶  Goo
 - `docker-compose.yml` — รัน web, worker, redis พร้อมกัน
 - `.env.example` — ตัวอย่าง environment variables (Drive credentials, admin password, redis url, ฯลฯ)
 - `.gitignore` — ignore node_modules, .env, models, etc.
+- `.dockerignore` — กัน node_modules/secrets/sqlite/.next จากเครื่อง host หลุดเข้า docker build context
 
 ---
 
@@ -82,7 +83,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind — frontend + API routes
 ### Lib (shared utilities)
 - `lib/db.ts` — SQLite (better-sqlite3), schema: `photos`, `embeddings`, `runs`, `settings` (โหลด schema อัตโนมัติ ไม่ต้อง migrate)
 - `lib/drive.ts` — Google Drive client (service account auth, list/download/stream)
-- `lib/face.ts` — face-api.js loader + embedding helper (server-side, @vladmandic/face-api)
+- `lib/face.ts` — face-api.js loader + embedding helper (server-side, @vladmandic/face-api). **Native deps (`tfjs-node`/`face-api`/`canvas`/`sharp`) เป็น dynamic import ใน `ready()`/`embedImage()` เท่านั้น** — ห้าม top-level import มิฉะนั้น `next build` (isPageStatic worker) จะ crash ตอนโหลด route module
 - `lib/queue.ts` — BullMQ queue + job factory (`face-process`, `drive-sync`)
 - `lib/auth.ts` — admin session + cookie helpers (iron-session)
 - `lib/similarity.ts` — euclidean distance + similarity %
