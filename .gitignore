@@ -1,0 +1,25 @@
+node_modules/
+.next/
+dist/
+out/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+
+# face-api models (โหลดผ่านสคริปต์ — อย่าใส่ใน repo)
+models/
+
+# secrets
+secrets/
+*.pem
+service-account*.json
+
+# database
+*.sqlite
+*.sqlite-journal
+data/
+
+# build
+*.tsbuildinfo

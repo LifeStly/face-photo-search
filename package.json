@@ -1,0 +1,19 @@
+{
+  "name": "face-photo-search",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:worker": "npm --workspace apps/worker run dev",
+    "build": "npm --workspace apps/web run build && npm --workspace apps/worker run build",
+    "start:web": "npm --workspace apps/web run start",
+    "start:worker": "npm --workspace apps/worker run start",
+    "models": "bash scripts/download-models.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,56 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./models:/app/models:ro
+      - ./secrets:/secrets:ro
+      - app-data:/data
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    volumes:
+      - ./models:/app/models:ro
+      - ./secrets:/secrets:ro
+      - app-data:/data
+
+volumes:
+  redis-data:
+  # tmpfs driver: data หายเมื่อ docker daemon รีสตาร์ท (เทียบเท่า SQLite in-memory)
+  # ระหว่างงาน volume นี้ shared ระหว่าง web และ worker ผ่าน path /data
+  app-data:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
