@@ -21,6 +21,13 @@ function faceQueue() {
   return _faceQueue;
 }
 
+let _driveSyncQueue: Queue | null = null;
+function driveSyncQueue() {
+  if (_driveSyncQueue) return _driveSyncQueue;
+  _driveSyncQueue = new Queue('drive-sync', { connection: conn() });
+  return _driveSyncQueue;
+}
+
 export async function processDriveSync(job: Job<DriveSyncJob>) {
   const { runId, folderId } = job.data;
   log(`[drive-sync] run=${runId} folder=${folderId}`);
@@ -65,7 +72,7 @@ export async function processDriveSync(job: Job<DriveSyncJob>) {
 
   // re-schedule poll
   const next = config.drive.pollIntervalSec * 1000;
-  await job.queue.add('sync', job.data, { delay: next, removeOnComplete: 100, removeOnFail: 100 });
+  await driveSyncQueue().add('sync', job.data, { delay: next, removeOnComplete: 100, removeOnFail: 100 });
 }
 
 function log(msg: string) {
