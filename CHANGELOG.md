@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-27 (รอบ 3 — bugfix)
+- แก้ build error ใน `apps/worker` — เพิ่ม `overrides` ใน `package.json` บังคับให้ bullmq ใช้ ioredis เวอร์ชันเดียวกับ project เพื่อแก้ TypeScript type conflict
+
 ## 2026-06-27 (รอบ 2 — ขยายหน้า Admin)
 - ขยาย DB schema: เพิ่ม columns `hidden`, `pinned_at`, `failed_at`, `fail_reason` ใน `photos` + ตาราง `settings(key,value,updated_at)` — ทั้ง `apps/web/lib/db.ts` และ `apps/worker/src/db.ts`
 - เพิ่ม `apps/web/lib/settings.ts` — get/set settings (appName, welcomeMessage, brandColor, publicUrl) พร้อม default จาก env
