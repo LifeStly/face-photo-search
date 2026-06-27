@@ -3,6 +3,7 @@
 ## 2026-06-27 (รอบ 3 — bugfix)
 - แก้ build error ใน `apps/worker` — เพิ่ม `overrides` ใน `package.json` บังคับให้ bullmq ใช้ ioredis เวอร์ชันเดียวกับ project เพื่อแก้ TypeScript type conflict
 - แก้ `apps/worker/src/driveSync.ts` — สร้าง `driveSyncQueue()` แทนการใช้ `job.queue` ที่เป็น protected ใน BullMQ v5
+- แก้ `apps/worker/Dockerfile` — ลบ COPY `apps/worker/node_modules` ออกจาก runner stage เพราะ npm workspaces hoist ทุกอย่างไว้ที่ root `node_modules`
 
 ## 2026-06-27 (รอบ 2 — ขยายหน้า Admin)
 - ขยาย DB schema: เพิ่ม columns `hidden`, `pinned_at`, `failed_at`, `fail_reason` ใน `photos` + ตาราง `settings(key,value,updated_at)` — ทั้ง `apps/web/lib/db.ts` และ `apps/worker/src/db.ts`

@@ -22,7 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV NODE_ENV=production
 COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app/apps/worker/node_modules ./apps/worker/node_modules
 COPY --from=base /app/apps/worker/dist ./apps/worker/dist
 COPY --from=base /app/apps/worker/package.json ./apps/worker/package.json
 
