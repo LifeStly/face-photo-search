@@ -23,6 +23,7 @@ FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 librsvg2-2 libvips \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
