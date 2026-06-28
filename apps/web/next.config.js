@@ -36,6 +36,9 @@ const nextConfig = {
     }
     return config;
   },
+  // ปิด face-api bundle internal warning logs (ลด noise)
+  // ดู wasm backend ไม่ทำงาน → ตก CPU โดยตั้งใจ — node-wasm bundle มี tfjs ภายในที่ register backend จากภายนอกไม่ได้
+  // ถ้าจะให้ wasm ทำงานจริงต้อง refactor ใช้ face-api.esm-nobundle + webpack alias tfjs-core → tfjs (ฟีเจอร์ Phase 6)
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'drive.google.com' },

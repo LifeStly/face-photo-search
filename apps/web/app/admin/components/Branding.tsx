@@ -9,20 +9,55 @@ type Settings = {
   publicUrl: string;
 };
 
+type TunnelStatus = { url: string | null; status: 'stopped' | 'starting' | 'running' | 'error'; message?: string };
+
 export default function Branding() {
   const [s, setS] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [tunnel, setTunnel] = useState<TunnelStatus>({ url: null, status: 'stopped' });
+  const [tunnelBusy, setTunnelBusy] = useState(false);
 
   async function load() {
     const r = await fetch('/api/admin/settings');
     if (r.ok) setS(await r.json());
+    const t = await fetch('/api/admin/tunnel');
+    if (t.ok) setTunnel(await t.json());
   }
 
   useEffect(() => {
     load();
+    const i = setInterval(() => {
+      fetch('/api/admin/tunnel').then((r) => r.ok ? r.json() : null).then((d) => d && setTunnel(d));
+    }, 5000);
+    return () => clearInterval(i);
   }, []);
+
+  async function startTunnel() {
+    setTunnelBusy(true);
+    try {
+      const r = await fetch('/api/admin/tunnel', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'tunnel failed');
+      setTunnel({ url: d.url, status: 'running' });
+      if (s && d.url) setS({ ...s, publicUrl: d.url });
+    } catch (e: any) {
+      setMsg('✗ ' + (e?.message ?? String(e)));
+    } finally {
+      setTunnelBusy(false);
+    }
+  }
+
+  async function stopTunnel() {
+    setTunnelBusy(true);
+    try {
+      await fetch('/api/admin/tunnel', { method: 'DELETE' });
+      setTunnel({ url: null, status: 'stopped' });
+    } finally {
+      setTunnelBusy(false);
+    }
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -116,6 +151,28 @@ export default function Branding() {
       </form>
 
       <div className="space-y-4">
+        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4">
+          <h2 className="font-semibold mb-3">เปิด Public URL ผ่าน Cloudflare Tunnel</h2>
+          <p className="text-xs text-neutral-500 mb-3">
+            สร้างลิงก์ <code>*.trycloudflare.com</code> ชั่วคราว แชร์ให้แขกได้ทันที (ต้องติดตั้ง <code>cloudflared</code> ก่อน — <a href="https://github.com/cloudflare/cloudflared/releases" target="_blank" rel="noreferrer" className="text-brand underline">ดาวน์โหลด</a>)
+          </p>
+          {tunnel.status === 'running' && tunnel.url ? (
+            <>
+              <div className="p-3 rounded bg-green-100 text-green-800 text-sm break-all">{tunnel.url}</div>
+              <button onClick={stopTunnel} disabled={tunnelBusy} className="mt-3 px-4 py-2 rounded border border-red-300 text-red-600 text-sm disabled:opacity-50">
+                {tunnelBusy ? '...' : 'ปิด tunnel'}
+              </button>
+            </>
+          ) : (
+            <button onClick={startTunnel} disabled={tunnelBusy} className="px-4 py-2 rounded bg-brand text-white text-sm disabled:opacity-50">
+              {tunnelBusy ? 'กำลังเปิด...' : 'เปิด Public URL'}
+            </button>
+          )}
+          {tunnel.status === 'error' && tunnel.message && (
+            <div className="mt-3 text-xs text-red-600">{tunnel.message}</div>
+          )}
+        </div>
+
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4">
           <h2 className="font-semibold mb-3">แชร์ให้แขก</h2>
           {s.publicUrl ? (

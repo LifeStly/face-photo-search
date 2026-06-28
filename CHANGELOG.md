@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-28 — Phase 5 + Bug fix
+
+### Bug fix
+- **db**: drop `UNIQUE(drive_file_id)` → ใช้ `UNIQUE(run_id, drive_file_id)` แทน ทำให้สร้าง run ใหม่บน folder เดิมแล้วภาพเดิมโผล่ได้ (auto-migrate ถ้า DB เก่ามีอยู่)
+- **secrets**: ย้าย `facefindpic-28416d203288.json` ไป `secrets/service-account.json` + update `.env` GOOGLE_APPLICATION_CREDENTIALS
+- **gitignore**: เพิ่ม patterns `facefindpic-*.json`, `*-credentials.json`, `data/config.json`
+
+### Phase 5 — Cloudflare Tunnel
+- **เพิ่ม** `apps/web/lib/tunnel.ts` — spawn `cloudflared tunnel --url localhost:3000`, capture trycloudflare.com URL
+- **เพิ่ม** `apps/web/app/api/admin/tunnel/route.ts` (GET status, POST start, DELETE stop)
+- **อัพเดท** `apps/web/app/admin/components/Branding.tsx` — เพิ่ม section "เปิด Public URL ผ่าน Cloudflare Tunnel" + auto-populate publicUrl
+
+### Known limits
+- WASM backend สำหรับ face-api ยังใช้ไม่ได้ — face-api.node-wasm bundle มี tfjs ภายในที่ inject backend ภายนอกไม่ได้ — CPU ใช้งานได้ ~5s/photo
+- Node bundle .exe — ยังเป็น launcher .bat ที่ require Node install (node-sea + Electron เป็น scope ใหญ่)
+
 ## 2026-06-28 — Redesign Phase 2/3/4 (Wizard + Speed + Launcher)
 
 ### Phase 2 — Setup Wizard

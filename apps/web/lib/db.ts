@@ -12,7 +12,47 @@ export function db(): Database.Database {
   _db = new Database(config.sqlite.path);
   _db.pragma('journal_mode = WAL');
   _db.exec(SCHEMA);
+  migrate(_db);
   return _db;
+}
+
+function migrate(d: Database.Database) {
+  // ตรวจว่ายังมี UNIQUE บน drive_file_id อย่างเดียว (schema เก่า) — drop ออกถ้าเจอ
+  const tbl = d.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='photos'`).get() as { sql: string } | undefined;
+  if (tbl?.sql && /drive_file_id\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(tbl.sql)) {
+    console.log(`${new Date().toISOString()} [db] migrating photos table: drop UNIQUE(drive_file_id) → UNIQUE(run_id, drive_file_id)`);
+    d.exec(`
+      BEGIN;
+      CREATE TABLE photos_new (
+        id TEXT PRIMARY KEY,
+        run_id INTEGER NOT NULL,
+        drive_file_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        mime_type TEXT,
+        width INTEGER,
+        height INTEGER,
+        thumbnail_url TEXT,
+        download_url TEXT,
+        view_url TEXT,
+        created_time INTEGER,
+        face_count INTEGER DEFAULT 0,
+        processed_at INTEGER,
+        hidden INTEGER NOT NULL DEFAULT 0,
+        pinned_at INTEGER,
+        failed_at INTEGER,
+        fail_reason TEXT,
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+      );
+      INSERT INTO photos_new SELECT * FROM photos;
+      DROP TABLE photos;
+      ALTER TABLE photos_new RENAME TO photos;
+      CREATE INDEX IF NOT EXISTS idx_photos_run ON photos(run_id);
+      CREATE INDEX IF NOT EXISTS idx_photos_created ON photos(created_time DESC);
+      CREATE INDEX IF NOT EXISTS idx_photos_pinned ON photos(pinned_at DESC);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_run_drive ON photos(run_id, drive_file_id);
+      COMMIT;
+    `);
+  }
 }
 
 const SCHEMA = `
@@ -31,7 +71,7 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS photos (
   id TEXT PRIMARY KEY,
   run_id INTEGER NOT NULL,
-  drive_file_id TEXT NOT NULL UNIQUE,
+  drive_file_id TEXT NOT NULL,
   name TEXT NOT NULL,
   mime_type TEXT,
   width INTEGER,
@@ -52,6 +92,7 @@ CREATE TABLE IF NOT EXISTS photos (
 CREATE INDEX IF NOT EXISTS idx_photos_run ON photos(run_id);
 CREATE INDEX IF NOT EXISTS idx_photos_created ON photos(created_time DESC);
 CREATE INDEX IF NOT EXISTS idx_photos_pinned ON photos(pinned_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_photos_run_drive ON photos(run_id, drive_file_id);
 
 CREATE TABLE IF NOT EXISTS embeddings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -80,6 +80,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind — frontend + API + background 
 - `app/api/setup/status/route.ts` *(GET)* — เช็คว่า setup เสร็จยัง
 - `app/api/setup/service-account/route.ts` *(POST upload)* — รับไฟล์ + validate + save
 - `app/api/setup/save/route.ts` *(POST)* — บันทึก admin password / Drive folder ลง `data/config.json`
+- `app/api/admin/tunnel/route.ts` *(GET status, POST start, DELETE stop)* — spawn `cloudflared` เปิด trycloudflare URL
 
 ### Lib — shared utilities
 - `lib/config.ts` — env loader (typed) + default paths (data/, models/, secrets/)
@@ -87,6 +88,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind — frontend + API + background 
 - `lib/drive.ts` — Google Drive client (service account auth), `listImagesInFolder`, `listFolders`, `downloadFile`, **`downloadThumbnail(fileId, size)`** — ใช้ภาพ thumbnail สำหรับ embed (เร็วขึ้น 5-10x แทนการดาวน์โหลด full)
 - `lib/face.ts` — face-api.js loader + `embedImage()` ที่มี SHA1 cache (50 entries), wasm backend ถ้าได้/ไม่ได้ตก CPU
 - `lib/setup.ts` — `readSetup()`/`writeSetup()`/`writeServiceAccount()`/`isSetupComplete()` (อ่าน-เขียน `data/config.json`)
+- `lib/tunnel.ts` — spawn/stop cloudflared, capture trycloudflare URL (เก็บ proc/state บน globalThis)
 - `lib/queue.ts` — **in-process queue** (ไม่ใช้ BullMQ/Redis) — `faceQueue` (concurrency = CPU-1) + `scheduleDriveSync()`/`cancelDriveSync()` (setTimeout loop) + `clearAll()`
 - `lib/boot.ts` — `ensureBooted()` lazy resume active run จาก SQLite ครั้งแรกที่มี admin request เข้า (เรียกจาก `/api/admin/status`)
 - `lib/auth.ts` — admin session cookie (iron-session)
