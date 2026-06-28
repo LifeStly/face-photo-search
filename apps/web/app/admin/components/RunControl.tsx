@@ -12,7 +12,7 @@ type Status = {
     status: string;
     startedAt: number;
   } | null;
-  system: { redis: boolean };
+  queue: { face: number; driveSyncScheduled: boolean };
 };
 
 export default function RunControl() {
@@ -115,8 +115,11 @@ export default function RunControl() {
       </div>
 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4">
-        <h2 className="font-semibold mb-3">ระบบ</h2>
-        <div className="text-sm">Redis: {status?.system.redis ? '✓ พร้อม' : '✗ ไม่พร้อม'}</div>
+        <h2 className="font-semibold mb-3">Queue</h2>
+        <div className="text-sm space-y-1">
+          <div>Face processing: <span className="font-medium">{status?.queue?.face ?? 0}</span> ภาพในคิว</div>
+          <div>Drive sync: <span className="font-medium">{status?.queue?.driveSyncScheduled ? 'กำลัง poll' : 'หยุด'}</span></div>
+        </div>
       </div>
     </div>
   );

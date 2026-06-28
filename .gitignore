@@ -15,6 +15,11 @@ models/
 secrets/
 *.pem
 service-account*.json
+# Google service account JSON ที่ Cloud Console ตั้งชื่อด้วย project prefix
+facefindpic-*.json
+*-credentials.json
+# Setup wizard config (มี admin password + session secret)
+data/config.json
 
 # database
 *.sqlite

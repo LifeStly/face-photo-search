@@ -1,5 +1,5 @@
 import { google, drive_v3 } from 'googleapis';
-import fs from 'node:fs';
+import fs from 'fs';
 import { config } from './config';
 
 const SCOPES = ['https://www.googleapis.com/auth/drive.readonly'];
@@ -70,4 +70,21 @@ export async function downloadFile(fileId: string): Promise<Buffer> {
     { responseType: 'arraybuffer' }
   );
   return Buffer.from(res.data as ArrayBuffer);
+}
+
+/**
+ * Fetch the Drive-rendered thumbnail (much smaller than the original) — used for
+ * face embedding so we don't burn bandwidth on full-resolution downloads. Falls
+ * back to the full file if the thumbnail endpoint refuses.
+ */
+export async function downloadThumbnail(fileId: string, size = 1024): Promise<Buffer> {
+  const auth = await (drive() as any).context._options.auth.getClient();
+  const token = (await auth.getAccessToken()).token;
+  const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return downloadFile(fileId);
+  const buf = Buffer.from(await res.arrayBuffer());
+  // Drive returns a tiny placeholder for files that have no thumbnail yet — fall back
+  if (buf.byteLength < 2048) return downloadFile(fileId);
+  return buf;
 }

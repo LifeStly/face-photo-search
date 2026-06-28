@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { db, activeRun, listFailedPhotos } from '@/lib/db';
-import { faceProcessQueue } from '@/lib/queue';
+import { enqueueFaceProcess } from '@/lib/jobs/faceProcess';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +13,6 @@ export async function POST() {
   const failed = listFailedPhotos(r.id);
   if (failed.length === 0) return NextResponse.json({ ok: true, retried: 0 });
 
-  // เคลียร์ flag fail + ลด failed counter ใน runs
   const clear = db().prepare(`UPDATE photos SET failed_at=NULL, fail_reason=NULL WHERE id=?`);
   const decRun = db().prepare(`UPDATE runs SET failed_photos = MAX(0, failed_photos - ?) WHERE id=?`);
   const tx = db().transaction(() => {
@@ -22,12 +21,8 @@ export async function POST() {
   });
   tx();
 
-  const q = faceProcessQueue();
   for (const p of failed) {
-    await q.add('embed', { photoId: p.id, driveFileId: p.drive_file_id, runId: r.id }, {
-      removeOnComplete: 200, removeOnFail: 200,
-      attempts: 2, backoff: { type: 'exponential', delay: 2000 },
-    });
+    enqueueFaceProcess({ photoId: p.id, driveFileId: p.drive_file_id, runId: r.id });
   }
   return NextResponse.json({ ok: true, retried: failed.length });
 }

@@ -1,24 +1,17 @@
 {
   "name": "face-photo-search",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "workspaces": [
-    "apps/*"
+    "apps/web"
   ],
   "scripts": {
-    "dev:web": "npm --workspace apps/web run dev",
-    "dev:worker": "npm --workspace apps/worker run dev",
-    "build": "npm --workspace apps/web run build && npm --workspace apps/worker run build",
-    "start:web": "npm --workspace apps/web run start",
-    "start:worker": "npm --workspace apps/worker run start",
-    "models": "bash scripts/download-models.sh"
+    "dev": "npm --workspace apps/web run dev",
+    "build": "npm --workspace apps/web run build",
+    "start": "npm --workspace apps/web run start",
+    "models": "node scripts/download-models.js"
   },
   "engines": {
     "node": ">=20"
-  },
-  "overrides": {
-    "bullmq": {
-      "ioredis": "^5.4.1"
-    }
   }
 }

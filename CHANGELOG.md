@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-06-28 — Redesign Phase 2/3/4 (Wizard + Speed + Launcher)
+
+### Phase 2 — Setup Wizard
+- **เพิ่ม** `apps/web/app/setup/page.tsx` — 4-step wizard (service account upload → admin password → drive folder → done)
+- **เพิ่ม** API: `apps/web/app/api/setup/{status,service-account,save}/route.ts`
+- **เพิ่ม** `apps/web/lib/setup.ts` — read/write `data/config.json` + validate service-account JSON
+- **เพิ่ม** `apps/web/app/SetupGate.tsx` — client gate ที่ redirect → /setup ถ้ายังไม่ตั้ง (ยกเว้น /setup เอง)
+- **อัพเดท** `apps/web/app/layout.tsx` — wrap children ด้วย SetupGate
+- **อัพเดท** `apps/web/lib/config.ts` — โหลด `data/config.json` ทับ env values
+- **อัพเดท** `apps/web/package.json` — เพิ่ม `cross-env DOTENV_CONFIG_QUIET=true` ปิด dotenv ad spam
+- **เพิ่ม** `apps/web/middleware.ts` — placeholder (ไม่ใช้ blocking — ทำใน SetupGate client)
+
+### Phase 3 — Speed tuning + Photo proxy
+- **เพิ่ม** `apps/web/app/api/photos/[id]/file/route.ts` — server-side proxy stream ภาพจาก Drive (private file ใช้ได้ผ่าน service account auth)
+- **อัพเดท** `apps/web/app/photo/[id]/page.tsx` + `apps/web/app/page.tsx` + `apps/web/app/search/page.tsx` — ใช้ proxy URL `/api/photos/[id]/file?size=thumb` แทน `drive.google.com/uc?export=view` (ที่ใช้กับ public file เท่านั้น)
+- **เพิ่ม** embed cache (SHA1-keyed Map) ใน `apps/web/lib/face.ts` — ส่ง selfie ซ้ำไม่ embed ใหม่
+- **ลอง** register wasm backend (face-api ยัง fallback CPU เพราะ bundle internal — รอ Phase 5)
+
+### Phase 4 — Distribution launcher
+- **เพิ่ม** `start.bat` (Windows) + `start.command` (Mac/Linux) — ดับเบิลคลิก → ตรวจ Node → install → download models → build → start + open browser
+- **เพิ่ม** `scripts/download-models.js` — cross-platform downloader (node-only, ไม่ต้อง pwsh/bash)
+- **เพิ่ม** `scripts/download-models.sh` — Mac/Linux fallback
+- **อัพเดท** root `package.json` script `models` → `node scripts/download-models.js`
+
+### URL handling fix
+- **อัพเดท** `apps/web/app/photo/[id]/page.tsx` + `apps/web/app/api/photos/[id]/route.ts` + `apps/web/app/api/admin/photos/[id]/route.ts` — `decodeURIComponent(params.id)` กัน `:` ใน photoId (`runId:driveFileId`)
+- **อัพเดท** `apps/web/app/search/page.tsx` + `apps/web/app/page.tsx` — `encodeURIComponent(photoId)` ใน Link href
+
+## 2026-06-28 — Redesign Phase 1: Strip Docker + Merge Worker
+Goal: ทำให้ "คนทั่วไป" ใช้ได้ — ตัด infrastructure ที่ซับซ้อนออก
+- **ลบ** `docker-compose.yml`, `apps/web/Dockerfile`, `apps/worker/Dockerfile`, `.dockerignore`, `systemd/`, `scripts/setup.sh`, `scripts/setup-tunnel.sh`, `scripts/download-models.sh` — Linux/Docker-only ของพวกนี้กั้นทาง Windows/Mac user
+- **ลบ workspace** `apps/worker/` ทั้งหมด — รวมเข้า `apps/web` แล้ว
+- **เพิ่ม** `apps/web/lib/jobs/driveSync.ts` + `apps/web/lib/jobs/faceProcess.ts` — งาน background รันใน-process
+- **เขียนใหม่** `apps/web/lib/queue.ts` — เลิกใช้ BullMQ/Redis ใช้ in-process Queue class เอง (concurrency control + clearAll) + `scheduleDriveSync()`/`cancelDriveSync()` ใช้ setTimeout
+- **เพิ่ม** `apps/web/lib/boot.ts` — `ensureBooted()` lazy resume active run ตอน admin request แรก (เลิกใช้ Next instrumentation hook เพราะ webpack bundle native deps พัง)
+- **เพิ่ม** webpack externals สำหรับ native deps + googleapis ใน `apps/web/next.config.js`
+- **เพิ่ม** `downloadThumbnail()` ใน `apps/web/lib/drive.ts` — ใช้ Drive thumbnail (~200KB) แทน full file (5-10MB) ตอน embed → เร็วขึ้น 5-10x (ดาวน์โหลด full ยังใช้ตอนผู้ใช้กดโหลดภาพ)
+- **อัพเดท** `apps/web/lib/config.ts` — เปลี่ยน default paths ให้เป็น local (`./data`, `<root>/models`, `<root>/secrets`) แทน path container, เพิ่ม `face.concurrency` (CPU-1), ลบ `redis.url`
+- **อัพเดท** `apps/web/lib/db.ts` — auto-mkdir data dir ถ้ายังไม่มี
+- **อัพเดท** `apps/web/lib/drive.ts` — ฟังก์ชัน `downloadThumbnail`
+- **เขียนใหม่** `apps/web/app/api/admin/{start,status,runs/stop,runs/sync-now,runs/retry-failed}/route.ts` — ใช้ new queue API (ไม่มี BullMQ types)
+- **อัพเดท** `package.json` (root) — เหลือ `apps/web` workspace, ลบ `dev:worker`/`start:worker` scripts, ลบ `bullmq` override
+- **อัพเดท** `apps/web/package.json` — ลบ `bullmq`, `ioredis` deps
+- **อัพเดท** `.env` + `.env.example` — ลบ `REDIS_URL`, เปลี่ยน paths เป็น local
+
 ## 2026-06-27 (รอบ 5 — แก้ /api/search server crash)
 - `apps/web/Dockerfile` + `apps/worker/Dockerfile` runtime stage — เพิ่ม `libgomp1` (OpenMP runtime) ที่ `@tensorflow/tfjs-node` ต้องใช้ใน bookworm-slim มิฉะนั้น native addon crash ตอน load → process ตาย ตอบ `ERR_EMPTY_RESPONSE`/`ERR_CONNECTION_RESET`
 

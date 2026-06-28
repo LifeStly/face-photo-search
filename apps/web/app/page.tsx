@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { listPhotos, activeRun } from '@/lib/db';
 import { getSettings } from '@/lib/settings';
+import PhotoGrid from './PhotoGrid';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,21 +43,14 @@ export default function FeedPage({ searchParams }: { searchParams: { groups?: st
           ยังไม่มีภาพ — รอ worker ดึงและ process จาก Google Drive
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {filtered.map((p) => (
-            <Link key={p.id} href={`/photo/${p.id}`} className="group block aspect-square overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800 relative">
-              {p.thumbnail_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.thumbnail_url} alt={p.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-neutral-400 text-xs">{p.name}</div>
-              )}
-              {p.pinned_at && (
-                <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-amber-500/90 text-white text-[10px] font-medium">PIN</span>
-              )}
-            </Link>
-          ))}
-        </div>
+        <PhotoGrid
+          storageKey="fps_feed_selected"
+          photos={filtered.map((p) => ({
+            id: p.id,
+            name: p.name,
+            topLeftBadge: p.pinned_at ? 'PIN' : undefined,
+          }))}
+        />
       )}
     </section>
   );

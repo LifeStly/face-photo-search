@@ -1,24 +1,69 @@
-import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
 import { config } from './config';
 
-let _redis: IORedis | null = null;
-function redis() {
-  if (_redis) return _redis;
-  _redis = new IORedis(config.redis.url, { maxRetriesPerRequest: null });
-  return _redis;
+type Task = () => Promise<void>;
+
+class Queue {
+  private running = 0;
+  private pending: Task[] = [];
+  constructor(private concurrency: number) {}
+
+  add(task: Task) {
+    this.pending.push(task);
+    this.drain();
+  }
+
+  size() {
+    return this.pending.length + this.running;
+  }
+
+  clear() {
+    this.pending = [];
+  }
+
+  private drain() {
+    while (this.running < this.concurrency && this.pending.length > 0) {
+      const t = this.pending.shift()!;
+      this.running++;
+      t().catch((e) => log(`[queue] task error: ${e?.message ?? e}`)).finally(() => {
+        this.running--;
+        this.drain();
+      });
+    }
+  }
 }
 
-let _driveSync: Queue | null = null;
-export function driveSyncQueue(): Queue {
-  if (_driveSync) return _driveSync;
-  _driveSync = new Queue('drive-sync', { connection: redis() });
-  return _driveSync;
+export const faceQueue = new Queue(config.face.concurrency);
+
+let _driveTimer: NodeJS.Timeout | null = null;
+
+export function scheduleDriveSync(runId: number, fn: () => Promise<void>, delayMs: number) {
+  cancelDriveSync();
+  _driveTimer = setTimeout(async () => {
+    _driveTimer = null;
+    try {
+      await fn();
+    } catch (e: any) {
+      log(`[drive-sync] error run=${runId}: ${e?.message ?? e}`);
+    }
+  }, delayMs);
 }
 
-let _faceProcess: Queue | null = null;
-export function faceProcessQueue(): Queue {
-  if (_faceProcess) return _faceProcess;
-  _faceProcess = new Queue('face-process', { connection: redis() });
-  return _faceProcess;
+export function cancelDriveSync() {
+  if (_driveTimer) {
+    clearTimeout(_driveTimer);
+    _driveTimer = null;
+  }
+}
+
+export function clearAll() {
+  cancelDriveSync();
+  faceQueue.clear();
+}
+
+export function queueStats() {
+  return { face: faceQueue.size(), driveSyncScheduled: _driveTimer !== null };
+}
+
+function log(msg: string) {
+  console.log(`${new Date().toISOString()} ${msg}`);
 }

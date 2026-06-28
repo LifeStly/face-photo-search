@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import Database from 'better-sqlite3';
 import { config } from './config';
 
@@ -5,6 +7,8 @@ let _db: Database.Database | null = null;
 
 export function db(): Database.Database {
   if (_db) return _db;
+  const dir = path.dirname(config.sqlite.path);
+  if (dir && dir !== '.' && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   _db = new Database(config.sqlite.path);
   _db.pragma('journal_mode = WAL');
   _db.exec(SCHEMA);

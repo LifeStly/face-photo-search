@@ -1,26 +1,42 @@
-import path from 'node:path';
+import path from 'path';
+import crypto from 'crypto';
 import { config } from './config';
 
-type Faceapi = typeof import('@vladmandic/face-api');
-type CanvasMod = typeof import('canvas');
+type CanvasMod = typeof import('@napi-rs/canvas');
 
-let _ready: Promise<{ faceapi: Faceapi; canvas: CanvasMod }> | null = null;
+// cache ไว้บน globalThis เพื่อกัน Next.js dev mode reload module แล้ว setWasmPaths/setBackend ซ้ำ
+const G = globalThis as any;
 
-function ready() {
-  if (_ready) return _ready;
-  _ready = (async () => {
-    await import('@tensorflow/tfjs-node');
-    const faceapi = await import('@vladmandic/face-api');
-    const canvas = await import('canvas');
+function ready(): Promise<{ faceapi: any; canvas: CanvasMod }> {
+  if (G.__faceapiReady) return G.__faceapiReady;
+  G.__faceapiReady = (async () => {
+    const faceapi: any = await import('@vladmandic/face-api/dist/face-api.node-wasm.js');
+    const tf = faceapi.tf;
+    // face-api.node-wasm bundle รวม backend-wasm ในตัวเองอยู่แล้ว — ลอง wasm ก่อน, fallback cpu
+    try {
+      const wasmMod: any = await import('@tensorflow/tfjs-backend-wasm');
+      const wasmDir = path.dirname(require.resolve('@tensorflow/tfjs-backend-wasm/package.json'));
+      try { wasmMod.setWasmPaths(path.join(wasmDir, 'dist') + path.sep); } catch {}
+    } catch {}
+    try { await tf.setBackend('wasm'); } catch {}
+    await tf.ready();
+
+    const canvas = await import('@napi-rs/canvas');
     const { Canvas, Image, ImageData } = canvas as any;
-    faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
+    class CanvasShim extends Canvas {
+      constructor(...args: any[]) {
+        super(...(args.length ? args : [1, 1]));
+      }
+    }
+    faceapi.env.monkeyPatch({ Canvas: CanvasShim, Image, ImageData });
     const dir = path.resolve(config.face.modelsPath);
     await faceapi.nets.ssdMobilenetv1.loadFromDisk(dir);
     await faceapi.nets.faceLandmark68Net.loadFromDisk(dir);
     await faceapi.nets.faceRecognitionNet.loadFromDisk(dir);
+    console.log(`${new Date().toISOString()} [face] tfjs ready, backend=${tf.getBackend()}`);
     return { faceapi, canvas };
   })();
-  return _ready;
+  return G.__faceapiReady;
 }
 
 export type Embedding = {
@@ -28,7 +44,14 @@ export type Embedding = {
   box: { x: number; y: number; width: number; height: number };
 };
 
+const embedCache = new Map<string, Embedding[]>();
+const CACHE_MAX = 50;
+
 export async function embedImage(input: Buffer): Promise<Embedding[]> {
+  const key = crypto.createHash('sha1').update(input).digest('hex');
+  const cached = embedCache.get(key);
+  if (cached) return cached;
+
   const { faceapi, canvas } = await ready();
   const sharp = (await import('sharp')).default;
   const resized = await sharp(input)
@@ -40,14 +63,14 @@ export async function embedImage(input: Buffer): Promise<Embedding[]> {
   const img = await canvas.loadImage(resized);
   const c = canvas.createCanvas(img.width, img.height);
   const ctx = c.getContext('2d');
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img as any, 0, 0);
 
   const detections = await faceapi
     .detectAllFaces(c as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
     .withFaceLandmarks()
     .withFaceDescriptors();
 
-  return detections.map((d) => ({
+  const result: Embedding[] = detections.map((d: any) => ({
     descriptor: d.descriptor,
     box: {
       x: d.detection.box.x,
@@ -56,6 +79,9 @@ export async function embedImage(input: Buffer): Promise<Embedding[]> {
       height: d.detection.box.height,
     },
   }));
+  if (embedCache.size >= CACHE_MAX) embedCache.delete(embedCache.keys().next().value as string);
+  embedCache.set(key, result);
+  return result;
 }
 
 export function serializeDescriptor(d: Float32Array): Buffer {
