@@ -158,10 +158,24 @@ export default function Branding() {
           </p>
           {tunnel.status === 'running' && tunnel.url ? (
             <>
-              <div className="p-3 rounded bg-green-100 text-green-800 text-sm break-all">{tunnel.url}</div>
-              <button onClick={stopTunnel} disabled={tunnelBusy} className="mt-3 px-4 py-2 rounded border border-red-300 text-red-600 text-sm disabled:opacity-50">
-                {tunnelBusy ? '...' : 'ปิด tunnel'}
-              </button>
+              <div className="flex flex-col items-center gap-3">
+                <div className="bg-white p-3 rounded-lg">
+                  <QRCodeSVG value={tunnel.url} size={240} level="M" />
+                </div>
+                <div className="text-center text-sm">
+                  <div className="text-neutral-500 mb-1">📱 สแกน QR ด้วยมือถือเพื่อเปิด</div>
+                  <a href={tunnel.url} target="_blank" rel="noreferrer" className="font-mono text-brand break-all underline">{tunnel.url}</a>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(tunnel.url!); setMsg('คัดลอกแล้ว'); setTimeout(() => setMsg(null), 1500); }}
+                    className="px-3 py-2 rounded border text-sm"
+                  >คัดลอก URL</button>
+                  <button onClick={stopTunnel} disabled={tunnelBusy} className="px-3 py-2 rounded border border-red-300 text-red-600 text-sm disabled:opacity-50">
+                    {tunnelBusy ? '...' : 'ปิด tunnel'}
+                  </button>
+                </div>
+              </div>
             </>
           ) : (
             <button onClick={startTunnel} disabled={tunnelBusy} className="px-4 py-2 rounded bg-brand text-white text-sm disabled:opacity-50">
