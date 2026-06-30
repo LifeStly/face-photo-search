@@ -11,10 +11,10 @@ echo.
 REM 1) Check Node.js
 where node >nul 2>&1
 if errorlevel 1 (
-  echo [!] Node.js ไม่พบ
+  echo [!] Node.js not found
   echo.
-  echo กรุณาติดตั้ง Node.js เวอร์ชัน 20 ขึ้นไป
-  echo เปิดหน้าดาวน์โหลด...
+  echo Please install Node.js version 20 or higher.
+  echo Opening download page...
   start https://nodejs.org/
   pause
   exit /b 1
@@ -26,31 +26,31 @@ echo.
 
 REM 2) Install deps if missing
 if not exist "node_modules" (
-  echo [+] ครั้งแรก: ติดตั้ง dependencies ^(ใช้เวลา 1-3 นาที^)...
+  echo [+] First run: installing dependencies ^(this may take 1-3 minutes^)...
   call npm install
-  if errorlevel 1 ( echo [!] npm install ล้มเหลว & pause & exit /b 1 )
+  if errorlevel 1 ( echo [!] npm install failed & pause & exit /b 1 )
   echo.
 )
 
 REM 3) Download face-api models if missing
 if not exist "models\face_recognition_model.bin" (
-  echo [+] ดาวน์โหลด face-api models ^(~30MB ครั้งเดียว^)...
+  echo [+] Downloading face-api models ^(~30MB, one time only^)...
   call npm run models
-  if errorlevel 1 ( echo [!] download models ล้มเหลว & pause & exit /b 1 )
+  if errorlevel 1 ( echo [!] Model download failed & pause & exit /b 1 )
   echo.
 )
 
 REM 4) Build production if not built
 if not exist "apps\web\.next\BUILD_ID" (
-  echo [+] Build production ^(ครั้งแรก ใช้เวลา 1-2 นาที^)...
+  echo [+] Building production bundle ^(first run, ~1-2 minutes^)...
   call npm run build
-  if errorlevel 1 ( echo [!] build ล้มเหลว & pause & exit /b 1 )
+  if errorlevel 1 ( echo [!] Build failed & pause & exit /b 1 )
   echo.
 )
 
 REM 5) Start server in new window + open browser
-echo [+] เปิดเซิร์ฟเวอร์ที่ http://localhost:3000
-echo     ปิดโปรแกรมโดยปิดหน้าต่าง terminal
+echo [+] Starting server at http://localhost:3000
+echo     Close this window to stop the app.
 echo.
 
 REM Open browser after a short delay

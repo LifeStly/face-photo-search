@@ -1,8 +1,8 @@
 import './globals.css';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { getSettings } from '@/lib/settings';
 import SetupGate from './SetupGate';
+import Header from './components/Header';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,16 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
       </head>
       <body>
-        <header className="sticky top-0 z-30 border-b border-neutral-200/70 dark:border-neutral-800 bg-white/80 dark:bg-neutral-950/80 backdrop-blur">
-          <div className="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
-            <Link href="/" className="font-bold text-brand">{s.appName}</Link>
-            <nav className="flex gap-4 text-sm">
-              <Link href="/" className="hover:text-brand">Feed</Link>
-              <Link href="/search" className="hover:text-brand">ค้นหา</Link>
-              <Link href="/admin" className="hover:text-brand">Admin</Link>
-            </nav>
-          </div>
-        </header>
+        <Header appName={s.appName} />
         <main className="mx-auto max-w-5xl px-4 py-6"><SetupGate>{children}</SetupGate></main>
         <footer className="mx-auto max-w-5xl px-4 py-10 text-center text-xs text-neutral-500">
           © {new Date().getFullYear()} {s.appName}

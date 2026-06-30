@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import SearchSpinner from '../components/SearchSpinner';
 
 const STORAGE_KEY = 'fps_search_state';
 
@@ -11,6 +12,8 @@ type Match = {
   name: string;
 };
 
+type DownloadMode = 'mobile-share' | 'mobile-zip' | 'desktop-fsaa' | 'desktop-zip';
+
 export default function SearchPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -19,7 +22,27 @@ export default function SearchPage() {
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'fetching' | 'sharing' | 'zipping'>('idle');
+  const [progress, setProgress] = useState(0);
+  const [mode, setMode] = useState<DownloadMode>('desktop-zip');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const w = window as any;
+    const isMobile = /Mobile|Android|iPhone|iPad|iPod|SamsungBrowser/i.test(navigator.userAgent);
+    let canShareFiles = false;
+    if (typeof (navigator as any).canShare === 'function') {
+      try {
+        const dummy = new File([new Blob(['x'])], 'x.jpg', { type: 'image/jpeg' });
+        canShareFiles = (navigator as any).canShare({ files: [dummy] });
+      } catch {}
+    }
+    const hasFsaa = typeof w.showDirectoryPicker === 'function';
+    if (isMobile && canShareFiles) setMode('mobile-share');
+    else if (isMobile) setMode('mobile-zip');
+    else if (hasFsaa) setMode('desktop-fsaa');
+    else setMode('desktop-zip');
+  }, []);
 
   // restore last search results when returning to this page (e.g. after viewing a photo)
   useEffect(() => {
@@ -59,27 +82,74 @@ export default function SearchPage() {
   }
   function clearSel() { setSelected(new Set()); }
 
+  function anchorDownload(href: string, filename: string) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function downloadZip(ids: string[]) {
+    setPhase('zipping');
+    const res = await fetch('/api/photos/download-zip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) throw new Error('ดาวน์โหลด ZIP ไม่สำเร็จ');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    anchorDownload(url, `photos-${Date.now()}.zip`);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
   async function downloadSelected() {
     if (selected.size === 0) return;
-    setDownloading(true);
+    setDownloading(true); setError(null); setProgress(0); setPhase('idle');
+    const ids = Array.from(selected);
+    const nameById = new Map((matches ?? []).map((m) => [m.photoId, m.name]));
+
+    if (ids.length === 1) {
+      const id = ids[0];
+      anchorDownload(`/api/photos/${encodeURIComponent(id)}/file?dl=1`, nameById.get(id) ?? `photo-${id}.jpg`);
+      setDownloading(false);
+      return;
+    }
+
     try {
-      const res = await fetch('/api/photos/download-zip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selected) }),
-      });
-      if (!res.ok) throw new Error('download failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `photos-${Date.now()}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      if (mode === 'mobile-share') {
+        setPhase('fetching');
+        const files: File[] = [];
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
+          const filename = nameById.get(id) ?? `photo-${id}.jpg`;
+          const res = await fetch(`/api/photos/${encodeURIComponent(id)}/file?dl=1`);
+          if (!res.ok) throw new Error(`โหลดล้มเหลว: ${filename}`);
+          const blob = await res.blob();
+          files.push(new File([blob], filename, { type: blob.type || 'image/jpeg' }));
+          setProgress(i + 1);
+        }
+        setPhase('sharing');
+        try {
+          if (!(navigator as any).canShare?.({ files })) throw new Error('canShare returned false');
+          await (navigator as any).share({ files, title: 'Photos' });
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') return;
+          await downloadZip(ids);
+        }
+      } else {
+        // FSAA สำหรับ desktop-fsaa, ZIP สำหรับที่เหลือ — ใช้ ZIP เป็นทางหลักของหน้านี้
+        // (search page ผล match มักไม่เยอะ ZIP 1 ไฟล์ก็พอ)
+        await downloadZip(ids);
+      }
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
       setDownloading(false);
+      setPhase('idle');
+      setTimeout(() => setProgress(0), 2000);
     }
   }
 
@@ -171,6 +241,8 @@ export default function SearchPage() {
 
       {error && <div className="mb-4 p-3 rounded bg-red-100 text-red-800 text-sm">{error}</div>}
 
+      {busy && <SearchSpinner />}
+
       {matches && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -217,16 +289,28 @@ export default function SearchPage() {
           )}
           {selected.size > 0 && (
             <div className="fixed bottom-0 left-0 right-0 border-t border-neutral-200 dark:border-neutral-800 bg-white/95 dark:bg-neutral-950/95 backdrop-blur z-20">
-              <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
-                <span className="text-sm">เลือก {selected.size} ภาพ</span>
+              <div className="mx-auto max-w-5xl px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm">
+                  {!downloading && `เลือก ${selected.size} ภาพ`}
+                  {downloading && phase === 'fetching' && `กำลังเตรียม ${progress}/${selected.size} ...`}
+                  {downloading && phase === 'sharing' && 'เปิดเมนูแชร์...'}
+                  {downloading && phase === 'zipping' && 'กำลังสร้าง ZIP บน server ...'}
+                  {downloading && phase === 'idle' && 'กำลังเริ่ม...'}
+                </span>
                 <button
                   onClick={downloadSelected}
                   disabled={downloading}
                   className="px-5 py-2 rounded bg-brand text-white text-sm font-medium disabled:opacity-50"
                 >
-                  {downloading ? 'กำลังเตรียม ZIP...' : `ดาวน์โหลด ZIP (${selected.size})`}
+                  {downloading ? '...' : `ดาวน์โหลด (${selected.size})`}
                 </button>
               </div>
+              {selected.size > 1 && !downloading && (
+                <div className="mx-auto max-w-5xl px-4 pb-2 text-xs text-neutral-500">
+                  {mode === 'mobile-share' && 'ⓘ จะเปิดเมนูแชร์ของมือถือ → กด "บันทึกรูปภาพ"'}
+                  {(mode === 'mobile-zip' || mode === 'desktop-zip' || mode === 'desktop-fsaa') && 'ⓘ จะได้ไฟล์ ZIP 1 ไฟล์'}
+                </div>
+              )}
             </div>
           )}
         </div>

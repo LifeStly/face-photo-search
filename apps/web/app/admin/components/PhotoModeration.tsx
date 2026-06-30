@@ -82,12 +82,13 @@ export default function PhotoModeration() {
           {filtered.map((p) => (
             <div key={p.id} className="rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
               <div className="aspect-square bg-neutral-100 dark:bg-neutral-800 relative">
-                {p.thumbnailUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.thumbnailUrl} alt={p.name} className={`w-full h-full object-cover ${p.hidden ? 'opacity-30' : ''}`} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-xs text-neutral-400">{p.name}</div>
-                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/photos/${encodeURIComponent(p.id)}/file?size=thumb`}
+                  alt={p.name}
+                  loading="lazy"
+                  className={`w-full h-full object-cover ${p.hidden ? 'opacity-30' : ''}`}
+                />
                 {p.pinned && (
                   <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-medium">PIN</span>
                 )}

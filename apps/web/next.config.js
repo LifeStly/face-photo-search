@@ -13,6 +13,7 @@ const NATIVE_DEPS = [
   'agent-base',
   'https-proxy-agent',
   'http-proxy-agent',
+  'archiver',
 ];
 
 const nextConfig = {
@@ -20,6 +21,7 @@ const nextConfig = {
   reactStrictMode: true,
   experimental: {
     serverComponentsExternalPackages: NATIVE_DEPS,
+    instrumentationHook: true,
   },
   webpack: (config, { isServer }) => {
     if (isServer) {

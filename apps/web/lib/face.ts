@@ -66,7 +66,7 @@ export async function embedImage(input: Buffer): Promise<Embedding[]> {
   ctx.drawImage(img as any, 0, 0);
 
   const detections = await faceapi
-    .detectAllFaces(c as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+    .detectAllFaces(c as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3, maxResults: 20 }))
     .withFaceLandmarks()
     .withFaceDescriptors();
 

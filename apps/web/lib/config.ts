@@ -86,7 +86,7 @@ export const config = {
   face: {
     modelsPath: modelsDir,
     resizeWidth: num('FACE_RESIZE_WIDTH', 800),
-    matchThreshold: num('FACE_MATCH_THRESHOLD', 0.5),
+    matchThreshold: num('FACE_MATCH_THRESHOLD', 0.6),
     concurrency: num('FACE_CONCURRENCY', Math.max(1, Math.min(4, os.cpus().length - 1))),
   },
   app: {

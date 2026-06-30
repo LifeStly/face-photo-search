@@ -16,7 +16,7 @@ async function runFaceProcess({ photoId, driveFileId, runId }: Args) {
   let lastErr: any;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const buf = await downloadThumbnail(driveFileId, 1024);
+      const buf = await downloadThumbnail(driveFileId, 1920);
       const faces = await embedImage(buf);
 
       const insertEmb = db().prepare(`
@@ -40,6 +40,7 @@ async function runFaceProcess({ photoId, driveFileId, runId }: Args) {
         .run(runId);
 
       log(`[face] ${photoId} → ${faces.length} face(s)`);
+      maybeCompleteArchive(runId);
       return;
     } catch (e: any) {
       lastErr = e;
@@ -53,6 +54,17 @@ async function runFaceProcess({ photoId, driveFileId, runId }: Args) {
   db().prepare(`UPDATE runs SET failed_photos = failed_photos + 1 WHERE id=?`)
     .run(runId);
   log(`[face] FAIL ${photoId}: ${msg}`);
+  maybeCompleteArchive(runId);
+}
+
+function maybeCompleteArchive(runId: number) {
+  const r = db().prepare(`SELECT mode, status FROM runs WHERE id=?`).get(runId) as { mode: string; status: string } | undefined;
+  if (!r || r.mode !== 'archive' || r.status !== 'running') return;
+  const { n } = db().prepare(`SELECT COUNT(*) as n FROM photos WHERE run_id=? AND processed_at IS NULL AND failed_at IS NULL`).get(runId) as { n: number };
+  if (n === 0) {
+    db().prepare(`UPDATE runs SET status='completed', finished_at=? WHERE id=?`).run(Date.now(), runId);
+    log(`[face] archive run=${runId} all photos processed, marked completed`);
+  }
 }
 
 function isRunStillActive(runId: number): boolean {

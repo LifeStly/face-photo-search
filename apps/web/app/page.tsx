@@ -1,57 +1,87 @@
 import Link from 'next/link';
-import { listPhotos, activeRun } from '@/lib/db';
 import { getSettings } from '@/lib/settings';
-import PhotoGrid from './PhotoGrid';
+import { IconCamera, IconChevronRight, IconImage, IconQR, IconShield, IconSparkles } from './components/icons';
 
 export const dynamic = 'force-dynamic';
 
-export default function FeedPage({ searchParams }: { searchParams: { groups?: string } }) {
-  const photos = listPhotos({ limit: 120 });
-  const run = activeRun();
+export default function WelcomePage() {
   const settings = getSettings();
-  const onlyGroups = searchParams.groups === '1';
-  const filtered = onlyGroups ? photos.filter((p) => p.face_count >= 3) : photos;
 
   return (
-    <section>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">{settings.appName}</h1>
-        {settings.welcomeMessage && (
-          <p className="mt-1 text-neutral-600 dark:text-neutral-400">{settings.welcomeMessage}</p>
-        )}
+    <section className="py-8 max-w-3xl mx-auto">
+      <div className="text-center mb-12">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white mb-5 shadow-lg shadow-brand/30">
+          <IconSparkles className="w-8 h-8" />
+        </div>
+        <h1 className="text-4xl font-bold tracking-tight mb-3">{settings.appName}</h1>
+        <p className="text-neutral-600 dark:text-neutral-400 max-w-md mx-auto">
+          {settings.welcomeMessage || 'ถ่าย selfie แล้วเจอภาพตัวเองจากงานได้ทันที'}
+        </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold">Feed</h2>
-          {run ? (
-            <p className="text-sm text-neutral-500">
-              งาน: <span className="font-medium">{run.folder_name ?? run.folder_id}</span> · ภาพที่ process แล้ว {run.processed_photos}/{run.total_photos}
-            </p>
-          ) : (
-            <p className="text-sm text-amber-600">ยังไม่มีงานที่กำลังรัน — admin ต้องเข้าไปเลือก folder งานก่อน</p>
-          )}
-        </div>
-        <div className="flex gap-2 text-sm">
-          <Link href="/" className={`px-3 py-1 rounded border ${!onlyGroups ? 'bg-brand text-white border-brand' : 'border-neutral-300'}`}>ทั้งหมด</Link>
-          <Link href="/?groups=1" className={`px-3 py-1 rounded border ${onlyGroups ? 'bg-brand text-white border-brand' : 'border-neutral-300'}`}>ภาพหมู่</Link>
-        </div>
-      </div>
+      <div className="grid gap-3 sm:gap-4">
+        <Card icon={<IconQR className="w-5 h-5" />} title="มาจากการสแกน QR code?">
+          สแกน QR ที่ได้รับจากช่างภาพ/ผู้จัดงาน เพื่อเข้าหน้าของงานนั้นโดยตรง — ค้นหาภาพตัวเองได้ทันที
+        </Card>
 
-      {filtered.length === 0 ? (
-        <div className="text-center py-20 text-neutral-500">
-          ยังไม่มีภาพ — รอ worker ดึงและ process จาก Google Drive
-        </div>
-      ) : (
-        <PhotoGrid
-          storageKey="fps_feed_selected"
-          photos={filtered.map((p) => ({
-            id: p.id,
-            name: p.name,
-            topLeftBadge: p.pinned_at ? 'PIN' : undefined,
-          }))}
-        />
-      )}
+        <Card icon={<IconCamera className="w-5 h-5" />} title="วิธีใช้งาน">
+          <ol className="space-y-1.5 text-sm leading-relaxed">
+            <Step n={1}>สแกน QR ของงานที่ได้รับ</Step>
+            <Step n={2}>กด &quot;ค้นหาภาพตัวเอง&quot; แล้วถ่าย selfie หรืออัปโหลดรูป</Step>
+            <Step n={3}>ระบบจะแสดงภาพที่มีหน้าคุณ พร้อม % ความเหมือน</Step>
+            <Step n={4}>เลือกภาพที่ต้องการ → ดาวน์โหลด</Step>
+          </ol>
+        </Card>
+
+        <Card icon={<IconShield className="w-5 h-5" />} title="สำหรับช่างภาพ / ผู้จัดงาน">
+          <p className="mb-4">จัดการ folder งาน ตั้งค่าระบบ และสร้าง QR ให้ผู้ใช้สแกน</p>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-brand hover:bg-brand-dark text-white text-sm font-medium transition"
+            >
+              เข้าหน้า Admin
+              <IconChevronRight className="w-3.5 h-3.5" />
+            </Link>
+            <Link
+              href="/live"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-neutral-300 dark:border-neutral-700 hover:border-brand hover:text-brand text-sm transition"
+            >
+              <IconImage className="w-3.5 h-3.5" />
+              ดูงาน Live ปัจจุบัน
+            </Link>
+            <Link
+              href="/help"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-neutral-300 dark:border-neutral-700 hover:border-brand hover:text-brand text-sm transition"
+            >
+              คู่มือการใช้งาน
+            </Link>
+          </div>
+        </Card>
+      </div>
     </section>
+  );
+}
+
+function Card({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white/40 dark:bg-neutral-900/40 backdrop-blur p-5 sm:p-6">
+      <div className="flex items-center gap-2.5 mb-2">
+        <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand/10 text-brand">{icon}</span>
+        <h2 className="font-semibold text-base">{title}</h2>
+      </div>
+      <div className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">{children}</div>
+    </div>
+  );
+}
+
+function Step({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-2.5">
+      <span className="flex-none inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
+        {n}
+      </span>
+      <span>{children}</span>
+    </li>
   );
 }

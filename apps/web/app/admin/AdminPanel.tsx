@@ -1,56 +1,57 @@
 'use client';
-import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import RunControl from './components/RunControl';
 import PhotoModeration from './components/PhotoModeration';
 import DriveBrowser from './components/DriveBrowser';
 import Branding from './components/Branding';
+import SetupTab from './components/SetupTab';
+import PublicAccessBanner from './components/PublicAccessBanner';
 
-type Tab = 'run' | 'photos' | 'drive' | 'branding';
+type Tab = 'folders' | 'photos' | 'settings';
 
-const TABS: Array<{ key: Tab; label: string }> = [
-  { key: 'run', label: 'ควบคุมงาน' },
-  { key: 'photos', label: 'จัดการภาพ' },
-  { key: 'drive', label: 'Drive' },
-  { key: 'branding', label: 'ตั้งค่าหน้าเว็บ' },
-];
+const TAB_TITLES: Record<Tab, { title: string; subtitle: string }> = {
+  folders: { title: 'Folders', subtitle: 'จัดการ folder งาน · เริ่ม Live / Archive · QR code' },
+  photos: { title: 'ภาพ & งาน', subtitle: 'ดูสถานะ Live · ซ่อน/pin/ลบภาพ' },
+  settings: { title: 'ตั้งค่า', subtitle: 'หน้าตาเว็บ · Public URL · Service Account' },
+};
 
 export default function AdminPanel() {
-  const [tab, setTab] = useState<Tab>('run');
-
-  async function logout() {
-    await fetch('/api/admin/login', { method: 'DELETE' });
-    location.href = '/admin/login';
-  }
+  const sp = useSearchParams();
+  const raw = sp?.get('tab') ?? 'folders';
+  const tab: Tab = raw === 'photos' || raw === 'settings' ? raw : 'folders';
+  const meta = TAB_TITLES[tab];
 
   return (
     <section>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Admin</h1>
-        <button onClick={logout} className="text-sm text-neutral-500 hover:text-brand">ออกจากระบบ</button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{meta.title}</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">{meta.subtitle}</p>
+        </div>
+        <Link href="/help" className="text-sm text-neutral-500 hover:text-brand inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-current text-[10px]">?</span>
+          คู่มือ
+        </Link>
       </div>
 
-      <div className="border-b border-neutral-200 dark:border-neutral-800 mb-6 -mx-4 px-4 overflow-x-auto">
-        <nav className="flex gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition ${
-                tab === t.key
-                  ? 'border-brand text-brand font-medium'
-                  : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-brand'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <PublicAccessBanner />
 
-      {tab === 'run' && <RunControl />}
-      {tab === 'photos' && <PhotoModeration />}
-      {tab === 'drive' && <DriveBrowser />}
-      {tab === 'branding' && <Branding />}
+      {tab === 'folders' && <DriveBrowser />}
+
+      {tab === 'photos' && (
+        <div className="space-y-6">
+          <RunControl />
+          <PhotoModeration />
+        </div>
+      )}
+
+      {tab === 'settings' && (
+        <div className="space-y-6">
+          <Branding />
+          <SetupTab />
+        </div>
+      )}
     </section>
   );
 }

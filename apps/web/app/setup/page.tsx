@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 type Status = { complete: boolean; hasServiceAccount: boolean; hasPassword: boolean; driveFolderId?: string; driveFolderName?: string };
 type Folder = { id: string; name: string };
@@ -94,7 +95,13 @@ export default function SetupPage() {
 
   return (
     <section className="max-w-2xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-2">ตั้งค่าเริ่มต้น</h1>
+      <div className="flex items-start justify-between mb-2">
+        <h1 className="text-3xl font-bold">ตั้งค่าเริ่มต้น</h1>
+        <Link href="/help?topic=setup-first-time" className="text-sm text-neutral-500 hover:text-brand inline-flex items-center gap-1">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-current text-xs">?</span>
+          คู่มือ
+        </Link>
+      </div>
       <p className="text-neutral-500 mb-8">3 ขั้นตอนเสร็จในไม่กี่นาที</p>
 
       <Step n={1} title="ใส่ Google Service Account" active={step === 1} done={!!status?.hasServiceAccount || !!serviceAccountEmail}>

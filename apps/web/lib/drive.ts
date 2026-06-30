@@ -2,6 +2,8 @@ import { google, drive_v3 } from 'googleapis';
 import fs from 'fs';
 import { config } from './config';
 
+// readonly เพียงพอ: SA ทำหน้าที่อ่าน folder ที่ user แชร์เท่านั้น
+// (Phase 1+ ลบ folder ทำใน DB local ฝั่งเรา — ไม่ touch Drive ของ user)
 const SCOPES = ['https://www.googleapis.com/auth/drive.readonly'];
 
 let _client: drive_v3.Drive | null = null;
@@ -62,6 +64,35 @@ export async function listFolders(parentId?: string): Promise<DriveFile[]> {
     orderBy: 'createdTime desc',
   });
   return (res.data.files ?? []) as DriveFile[];
+}
+
+let _saEmail: string | null = null;
+
+/**
+ * Clear cached Drive client + SA email หลัง user upload `.json` ใหม่
+ * — เรียก lazy: ครั้งหน้าที่ใช้ Drive จะอ่านไฟล์ใหม่จาก credentialsPath
+ */
+export function resetDriveClient() {
+  _client = null;
+  _saEmail = null;
+}
+
+/**
+ * Resolve a folder's current name from Drive by ID.
+ * Returns null if the file isn't accessible (no share, deleted) so callers can
+ * fall back to whatever was stored locally.
+ */
+export async function getFolderName(folderId: string): Promise<string | null> {
+  try {
+    const res: any = await drive().files.get({
+      fileId: folderId,
+      fields: 'name',
+      supportsAllDrives: true,
+    } as any);
+    return (res.data?.name as string) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function downloadFile(fileId: string): Promise<Buffer> {
