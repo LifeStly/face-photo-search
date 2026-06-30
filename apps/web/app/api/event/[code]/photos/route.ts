@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
   const limit = Number(url.searchParams.get('limit') ?? 60);
   const offset = Number(url.searchParams.get('offset') ?? 0);
 
-  const photos = listPhotos({ runId: g.access.runId, limit, offset, includeHidden: false });
+  const photos = listPhotos({ runId: g.access.runId, limit, offset, includeHidden: false, tenantId: g.access.tenantId });
   return NextResponse.json({
     photos: photos.map((p) => ({
       id: p.id,

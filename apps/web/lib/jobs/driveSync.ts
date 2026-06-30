@@ -13,15 +13,15 @@ export async function runDriveSync({ runId, folderId, folderName }: Args) {
     return;
   }
 
-  log(`[drive-sync] run=${runId} mode=${runInfo.mode} folder=${folderId}`);
-  const files = await listImagesInFolder(folderId);
+  log(`[drive-sync] run=${runId} mode=${runInfo.mode} folder=${folderId} tenant=${runInfo.tenant_id}`);
+  const files = await listImagesInFolder(folderId, runInfo.tenant_id);
   log(`[drive-sync] found ${files.length} images`);
 
   const insert = db().prepare(`
     INSERT OR IGNORE INTO photos
       (id, run_id, drive_file_id, name, mime_type, width, height,
-       thumbnail_url, download_url, view_url, created_time)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       thumbnail_url, download_url, view_url, created_time, tenant_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let queued = 0;
@@ -38,7 +38,8 @@ export async function runDriveSync({ runId, folderId, folderName }: Args) {
       f.thumbnailLink ?? null,
       f.webContentLink ?? `https://drive.google.com/uc?export=download&id=${f.id}`,
       f.webViewLink ?? null,
-      f.createdTime ? Date.parse(f.createdTime) : null
+      f.createdTime ? Date.parse(f.createdTime) : null,
+      runInfo.tenant_id
     );
     if (r.changes > 0) {
       enqueueFaceProcess({ photoId: id, driveFileId: f.id, runId });
@@ -71,8 +72,8 @@ export function startDriveSyncNow(args: Args) {
   scheduleDriveSync(args.runId, () => runDriveSync(args), 0);
 }
 
-function getRunInfo(runId: number): { status: string; mode: string } | undefined {
-  return db().prepare(`SELECT status, mode FROM runs WHERE id=?`).get(runId) as { status: string; mode: string } | undefined;
+function getRunInfo(runId: number): { status: string; mode: string; tenant_id: string } | undefined {
+  return db().prepare(`SELECT status, mode, tenant_id FROM runs WHERE id=?`).get(runId) as { status: string; mode: string; tenant_id: string } | undefined;
 }
 
 function log(msg: string) {

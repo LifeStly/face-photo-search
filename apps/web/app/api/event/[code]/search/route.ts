@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: { code: strin
   }
 
   const target = detected[0].descriptor;
-  const rows = allEmbeddings(g.access.runId);
+  const rows = allEmbeddings(g.access.runId, g.access.tenantId);
 
   const byPhoto = new Map<string, number>();
   for (const r of rows) {
@@ -44,8 +44,8 @@ export async function POST(req: NextRequest, { params }: { params: { code: strin
   const ids = hits.map((h) => h.photoId);
   const placeholders = ids.map(() => '?').join(',');
   const photos = db()
-    .prepare(`SELECT id, name, thumbnail_url FROM photos WHERE id IN (${placeholders})`)
-    .all(...ids) as Array<{ id: string; name: string; thumbnail_url: string | null }>;
+    .prepare(`SELECT id, name, thumbnail_url FROM photos WHERE tenant_id=? AND id IN (${placeholders})`)
+    .all(g.access.tenantId, ...ids) as Array<{ id: string; name: string; thumbnail_url: string | null }>;
   const meta = new Map(photos.map((p) => [p.id, p]));
 
   const matches = hits.map((h) => {

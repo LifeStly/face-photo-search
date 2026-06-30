@@ -26,8 +26,8 @@ export async function POST(req: NextRequest, { params }: { params: { code: strin
   const requested = await readIds(req);
   if (requested.length === 0) return NextResponse.json({ error: 'no ids' }, { status: 400 });
 
-  // scope filter — เก็บเฉพาะ photo id ที่ belong to runId ของ event นี้
-  const ids = requested.filter((id) => photoBelongsToEvent(id, g.access.runId));
+  // scope filter — เก็บเฉพาะ photo id ที่ belong to runId+tenant ของ event นี้
+  const ids = requested.filter((id) => photoBelongsToEvent(id, g.access.runId, g.access.tenantId));
   if (ids.length === 0) return NextResponse.json({ error: 'no valid photos in scope' }, { status: 400 });
 
   const archive = new ZipArchive({ zlib: { level: 0 } });
@@ -35,10 +35,10 @@ export async function POST(req: NextRequest, { params }: { params: { code: strin
   (async () => {
     const seen = new Set<string>();
     for (const id of ids) {
-      const photo = getPhoto(id);
+      const photo = getPhoto(id, g.access.tenantId);
       if (!photo) continue;
       try {
-        const buf = await downloadFile(photo.drive_file_id);
+        const buf = await downloadFile(photo.drive_file_id, g.access.tenantId);
         let name = (photo.name ?? `photo-${id}`).replace(/[\/\\]/g, '_');
         if (seen.has(name)) {
           const m = name.match(/^(.*?)(\.[^.]+)?$/);

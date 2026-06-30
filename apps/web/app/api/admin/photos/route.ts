@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { listPhotos } from '@/lib/db';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) return NextResponse.json({ error: 'no tenant' }, { status: 403 });
   const sp = req.nextUrl.searchParams;
   const limit = Math.min(parseInt(sp.get('limit') || '120', 10), 500);
   const offset = parseInt(sp.get('offset') || '0', 10);
-  const photos = listPhotos({ limit, offset, includeHidden: true });
+  const photos = listPhotos({ limit, offset, includeHidden: true, tenantId });
   return NextResponse.json({
     photos: photos.map((p) => ({
       id: p.id,

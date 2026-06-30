@@ -91,5 +91,12 @@ export const config = {
   },
   app: {
     name: env('NEXT_PUBLIC_APP_NAME', 'Face Photo Search'),
+    mode: ((): 'portable' | 'saas' => {
+      const m = (process.env.APP_MODE ?? 'portable').toLowerCase();
+      if (m !== 'portable' && m !== 'saas') {
+        throw new Error(`Invalid APP_MODE: ${m} (expected 'portable' or 'saas')`);
+      }
+      return m;
+    })(),
   },
 } as const;

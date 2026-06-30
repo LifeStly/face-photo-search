@@ -1,0 +1,35 @@
+# Face Photo Search — SaaS edition reverse proxy
+#
+# วิธีใช้:
+#   1) DNS A record ของโดเมนชี้มาที่ server
+#   2) แก้ your-domain.com ด้านล่างเป็นโดเมนจริง
+#   3) sudo cp Caddyfile /etc/caddy/Caddyfile
+#   4) sudo systemctl reload caddy
+# Caddy จะออก/ต่ออายุ Let's Encrypt cert ให้อัตโนมัติ
+#
+# หมายเหตุ Google OAuth บังคับ HTTPS — host บน server ที่มีโดเมนแล้วเท่านั้น
+
+your-domain.com {
+    # next.js dev/prod รันที่ port 3000
+    reverse_proxy localhost:3000
+
+    # upload limit ใหญ่ขึ้น (รับ selfie + SA JSON)
+    request_body {
+        max_size 50MB
+    }
+
+    # cache static assets
+    @static {
+        path /_next/static/*
+    }
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    # logging — เก็บ access log ไปไฟล์ rotate
+    log {
+        output file /var/log/caddy/face-photo-search.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+        format json
+    }
+}

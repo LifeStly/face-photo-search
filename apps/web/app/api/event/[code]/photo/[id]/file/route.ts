@@ -11,18 +11,18 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
   if (!g.ok) return gateError(g);
 
   const id = decodeURIComponent(params.id);
-  if (!photoBelongsToEvent(id, g.access.runId)) {
+  if (!photoBelongsToEvent(id, g.access.runId, g.access.tenantId)) {
     return NextResponse.json({ error: 'not found' }, { status: 404 });
   }
-  const p = getPhoto(id);
+  const p = getPhoto(id, g.access.tenantId);
   if (!p) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
   const size = req.nextUrl.searchParams.get('size');
   const forceDownload = req.nextUrl.searchParams.get('dl') === '1';
   try {
     const buf = size === 'thumb'
-      ? await downloadThumbnail(p.drive_file_id, 600)
-      : await downloadFile(p.drive_file_id);
+      ? await downloadThumbnail(p.drive_file_id, 600, g.access.tenantId)
+      : await downloadFile(p.drive_file_id, g.access.tenantId);
     const disposition = forceDownload ? 'attachment' : 'inline';
     return new NextResponse(new Uint8Array(buf), {
       status: 200,

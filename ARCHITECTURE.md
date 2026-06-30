@@ -2,6 +2,14 @@
 
 แผนที่ระบบ ทุกไฟล์ในโค้ดต้องหาเจอจากเอกสารนี้
 
+## โหมดของระบบ (dual-mode — Phase A onwards)
+
+ระบบเดียวกันรันได้ 2 โหมดผ่าน env `APP_MODE`:
+- **portable** (default) — ของเดิม: single SA + single Drive folder + single admin password, ติดตั้งบนเครื่องช่างภาพ
+- **saas** — multi-tenant: super-admin จัดการ sub-admin (ผู้เช่า), แต่ละ tenant มี Drive source / admin user / quota / audit log ของตัวเอง
+
+ใน DB ใช้ schema เดียวกัน. portable mode ผูกข้อมูลทั้งหมดกับ `tenants.id = 'default'` ที่ seed ตอน boot. ทุก query path สำคัญ scope ด้วย `tenant_id` เพื่อกัน leak ข้าม tenant ใน saas mode
+
 ## ภาพรวม flow (Phase 1 — process เดียว ไม่มี Docker/Redis)
 
 ```
@@ -72,7 +80,9 @@ Next.js 14 (App Router) + TypeScript + Tailwind — frontend + API + background 
 - `app/help/page.tsx` *(server)* — คู่มือในเว็บ: sidebar list ของ topics + content area; `?topic=` query param เลือก
 - `app/components/HelpButton.tsx` *(client)* — ปุ่ม ? icon/link variant → modal popup contextual help (มี "เปิดหน้าเต็ม" ลิงก์ไป /help)
 - `app/setup/page.tsx` *(client)* — **Setup Wizard** 4 ขั้น (service account → password → folder → done)
-- `app/admin/login/page.tsx` — admin login
+- `app/admin/login/page.tsx` *(client)* — fetch `/api/setup/status` → ตรวจ mode; portable: password เดียว; saas: username + password; redirect ตาม role (super → /super, tenant_admin → /admin)
+- `app/super/page.tsx` *(server, saas only)* — gate `requireSuperAdmin()` → render `SuperPanel`; portable mode แสดง "ไม่ใช่ SaaS mode"
+- `app/super/SuperPanel.tsx` *(client)* — tabs: Tenants (list/create/edit/delete + expandable quota+usage card) / Audit Log; Create modal (tenant + admin user + quota); Edit modal (status/expires + quota)
 - `app/admin/page.tsx` *(server)* — gate auth, render `AdminPanel` ใน `<Suspense>` (useSearchParams requirement)
 - `app/admin/AdminPanel.tsx` *(client)* — URL-driven tab (`?tab=folders|photos|settings`); 3 sections: folders (DriveBrowser), photos (RunControl + PhotoModeration), settings (Branding + SetupTab)
 - `app/admin/components/{RunControl,PhotoModeration,DriveBrowser,QRPanel,Branding,SetupTab,PublicAccessBanner}.tsx` — DriveBrowser ทำหน้าที่ทั้ง browse + จัดการ Live/Archive + ลบ + QR (ผ่าน `<QRPanel>`); SetupTab = reset Service Account flow (view → warn → upload → done); `PublicAccessBanner` = banner บนสุดทุก tab บอกสถานะ Cloudflare tunnel + ปุ่มเปิด/ปิด
@@ -106,6 +116,21 @@ Next.js 14 (App Router) + TypeScript + Tailwind — frontend + API + background 
 - `app/api/setup/save/route.ts` *(POST)* — บันทึก admin password / Drive folder ลง `data/config.json`
 - `app/api/admin/tunnel/route.ts` *(GET status, POST start, DELETE stop)* — spawn `cloudflared` เปิด trycloudflare URL
 - `app/api/admin/folders/[folderId]/qr/route.ts` *(POST/DELETE)* — เปิด/อัพเดท/ปิด QR ของ folder; POST body `{password?: string|null}` → generate 8-char code + hash password; DELETE → ลบ event_code entry
+- `app/api/admin/drive-source/route.ts` *(GET/POST)* — saas: tenant อ่าน + อัพ SA JSON (เก็บ `secrets/tenants/<id>/service-account.json`) → upsert `drive_sources`
+
+### Super-admin API routes  (`app/api/super/`)
+- `app/api/super/tenants/route.ts` *(GET/POST)* — list tenants, create tenant + tenant-admin user คนแรก + quota; ป้องกัน slug ซ้ำ, username ซ้ำ
+- `app/api/super/tenants/[id]/route.ts` *(GET/PATCH/DELETE)* — read, update name/slug/status/expires_at, delete cascade (ลบทุกตารางของ tenant)
+- `app/api/super/tenants/[id]/quota/route.ts` *(GET/PUT)* — read/set monthly_photo_limit, monthly_search_limit, storage_byte_limit
+- `app/api/super/tenants/[id]/usage/route.ts` *(GET ?period=yyyymm)* — read usage_counters ของ period (default: เดือนปัจจุบัน)
+- `app/api/super/audit/route.ts` *(GET ?tenantId&limit&offset)* — list audit_log
+
+### Setup API routes  (`app/api/setup/`)
+- `app/api/setup/super/route.ts` *(POST, saas only)* — bootstrap super-admin คนแรก (one-time); generate SESSION_SECRET ถ้ายังไม่มี
+
+### OAuth API routes  (`app/api/oauth/google/`)
+- `app/api/oauth/google/start/route.ts` *(GET, saas only)* — สร้าง Google OAuth URL (`offline + prompt=consent`); state = base64(tenantId+nonce); บังคับ HTTPS (ยกเว้น localhost); ต้องมี `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI`
+- `app/api/oauth/google/callback/route.ts` *(GET)* — แลก code → tokens; ต้องมี `refresh_token` (ไม่งั้น redirect `?oauth=error&reason=no_refresh_token`); บันทึก JSON ลง `drive_sources.oauth_tokens_json`; redirect `/admin?oauth=ok|error`
 - `app/api/event/[code]/auth/route.ts` *(POST)* — verify password → set `fps_event` session cookie (TTL 7d); public event auto-pass
 - `app/api/event/[code]/info/route.ts` *(GET, public)* — แสดงชื่อ folder + `hasPassword` + `authed` (เรียกก่อน gate เพื่อตัดสิน UI)
 - `app/api/event/[code]/photos/route.ts` *(GET)* — list ภาพ scope ที่ runId ของ folder (ผ่าน `gateEvent`)
@@ -114,16 +139,18 @@ Next.js 14 (App Router) + TypeScript + Tailwind — frontend + API + background 
 - `app/api/event/[code]/download-zip/route.ts` *(POST)* — multi-download scope; filter id ที่ไม่อยู่ใน scope ทิ้ง
 
 ### Lib — shared utilities
-- `lib/config.ts` — env loader (typed) + default paths (data/, models/, secrets/)
-- `lib/db.ts` — SQLite (better-sqlite3) + schema + helpers (`activeRun` ที่ filter `mode='live'`, `listPhotos`, `allEmbeddings`, `dropFolderData`, `addIgnored`/`removeIgnored`/`isIgnored`/`listIgnoredFolderIds`, `latestRunForFolder`/`latestRunIdForFolder`, `getEventCode`) — auto-create dir; schema ใหม่: `runs.mode` (`live`|`archive`), ตาราง `event_codes` (QR), `ignored_folders` (blocklist)
-- `lib/drive.ts` — Google Drive client (service account auth, scope `drive.readonly`), `listImagesInFolder`, `listFolders`, `getFolderName`, `downloadFile`, **`downloadThumbnail(fileId, size)`** — ใช้ภาพ thumbnail สำหรับ embed (เร็วขึ้น 5-10x แทนการดาวน์โหลด full); `resetDriveClient()` clear client+email cache สำหรับ reset SA หลัง upload file ใหม่ (ไม่ต้อง restart process)
+- `lib/config.ts` — env loader (typed) + default paths (data/, models/, secrets/) + **`app.mode`** (`portable`|`saas`) อ่านจาก `APP_MODE`
+- `lib/db.ts` — SQLite (better-sqlite3) + schema + helpers (`activeRun` ที่ filter `mode='live'`, `listPhotos`, `allEmbeddings`, `dropFolderData`, `addIgnored`/`removeIgnored`/`isIgnored`/`listIgnoredFolderIds`, `latestRunForFolder`/`latestRunIdForFolder`, `getEventCode`) — auto-create dir + seed `tenants(id='default')`; ตารางหลัก: `runs.mode` (`live`|`archive`), `event_codes` (QR), `ignored_folders` (blocklist); **multi-tenant tables (Phase A):** `tenants`, `users`, `drive_sources`, `quotas`, `usage_counters`, `audit_log`; ตารางเดิมทุกตัวมี `tenant_id` (`NOT NULL DEFAULT 'default'` ยกเว้น `settings.tenant_id` ที่ NULL = global); migration `addTenantIdIfMissing()` ALTER ADD ให้ DB เก่า; export `DEFAULT_TENANT_ID = 'default'`
+- `lib/drive.ts` — Google Drive client (scope `drive.readonly`); `drive()` global SA (portable mode); **`driveFor(tenantId)` per-tenant** (saas): lookup `drive_sources` → SA file หรือ OAuth2 client; cache ต่อ tenant; `resetTenantDriveClient(tenantId)` clear cache; ฟังก์ชันหลัก (`listImagesInFolder`, `listFolders`, `getFolderName`, `downloadFile`, `downloadThumbnail`) รับ `tenantId?` arg ทุกตัว — undefined ⇒ portable global
 - `lib/face.ts` — face-api.js loader + `embedImage()` ที่มี SHA1 cache (50 entries), wasm backend ถ้าได้/ไม่ได้ตก CPU
 - `lib/setup.ts` — `readSetup()`/`writeSetup()`/`writeServiceAccount()`/`isSetupComplete()` (อ่าน-เขียน `data/config.json`)
 - `lib/tunnel.ts` — spawn/stop cloudflared, capture trycloudflare URL (เก็บ proc/state บน globalThis)
 - `lib/queue.ts` — **in-process queue** (ไม่ใช้ BullMQ/Redis) — `faceQueue` (concurrency = CPU-1) + `scheduleDriveSync()`/`cancelDriveSync()` (setTimeout loop) + `clearAll()`
 - `lib/boot.ts` — `ensureBooted()` resume เมื่อ server start (เรียกจาก `instrumentation.ts`); ฟื้นฟู archive run ที่ค้าง (flip completed→running ถ้ายังมี pending), re-enqueue pending photos ทุก run (live + archive), resume Drive sync ของ Live run
-- `lib/auth.ts` — admin session cookie (iron-session, cookie `fps_session`, TTL 8h) + event session (cookie `fps_event`, TTL 7d, `events: {[code]: expires_at}`); helper `requireAdmin()`, `getEventSession()`, `isEventAuthed(code)`
-- `lib/event.ts` — `gateEvent(code)` → verify code+auth+run, คืน `{code, folderId, runId}` หรือ error; `photoBelongsToEvent(photoId, runId)` for scope check
+- `lib/auth.ts` — admin session cookie (iron-session, cookie `fps_session`, TTL 8h) + event session (cookie `fps_event`, TTL 7d, `events: {[code]: expires_at}`); Session shape: `{admin, loggedAt, userId, tenantId, role: 'super'|'tenant_admin'}`; helper `requireAdmin()`, `requireSuperAdmin()` (saas-only), `requireTenantAdmin()` (คืน `{ok, tenantId, role}` — portable mode ฝา `'default'`/`'tenant_admin'`), `getEventSession()`, `isEventAuthed(code)`
+- `lib/users.ts` — bcrypt user CRUD + auth (Phase A): `findUserByUsername/findUserById`, `listUsersByTenant`, `listSuperAdmins`, `createUser({username,password,role,tenantId})`, `updatePassword`, `deleteUser`, `verifyLogin(username,password)`, `hasAnySuperAdmin`, `touchLogin` — id prefix `sup_/usr_`
+- `lib/tenant.ts` — tenant/quota/usage/audit/drive-source CRUD (Phase A): `listTenants/getTenant/getTenantBySlug/createTenant/updateTenant/deleteTenant`, `getDriveSourceForTenant/upsertDriveSource`, `getQuota/setQuota`, `getUsage(period?)/incrementUsage`, `logAudit({tenantId,userId,action,target,meta})`, `getCurrentTenantId()`, `assertTenantAccess(tenantId)` — id prefix `tnt_/drv_`
+- `lib/event.ts` — `gateEvent(code)` → verify code+auth+run, คืน `{code, folderId, runId, tenantId}` หรือ error; `photoBelongsToEvent(photoId, runId, tenantId?)` for scope check; `ensureEventCodeForFolder(folderId, tenantId?)` insert tenant-scoped
 - `lib/similarity.ts` — euclidean + similarity %
 - `lib/settings.ts` — branding settings DB get/set
 - `lib/help-content.tsx` — content data ของคู่มือ in-app (6 topics: setup-first-time, share-folder, reset-sa, start-work, qr-code, delete-folder); export `HELP_TOPICS` array + `getHelpTopic(id)`
@@ -155,6 +182,13 @@ Next.js 14 (App Router) + TypeScript + Tailwind — frontend + API + background 
 ## ระบบหลัก: Launchers  (root)
 - `start.bat` — Windows ดับเบิลคลิก: check Node → install → models → build → start + open browser
 - `start.command` — Mac/Linux ดับเบิลคลิก/bash: เหมือนกัน
+
+---
+
+## ระบบหลัก: Deploy templates  (`deploy/` — saas mode)
+- `deploy/Caddyfile` — reverse proxy (port 80/443 → localhost:3000) + Let's Encrypt อัตโนมัติ + JSON access log
+- `deploy/face-photo-search.service` — systemd unit; user `facephoto`; `APP_MODE=saas`; MemoryMax 4G; security hardening (NoNewPrivileges, ProtectHome, ProtectSystem=strict)
+- `deploy/README.md` — คู่มือ deploy step-by-step ตั้งแต่ clone → Caddy → systemd → Google OAuth setup → backup cron → troubleshoot table
 
 ---
 

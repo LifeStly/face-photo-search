@@ -14,7 +14,13 @@ const configPath = () => path.join(config.paths.projectRoot, 'data', 'config.jso
 const serviceAccountPath = () => config.drive.credentialsPath;
 
 export function isSetupComplete(): boolean {
-  // ใช้ค่าจริงจาก runtime (config.json ที่ทับ env แล้ว) — ไม่ใช่แค่ config.json
+  // saas: เสร็จเมื่อมี super-admin (SA + folder per-tenant ทำหลัง login)
+  if (config.app.mode === 'saas') {
+    // dynamic require — กัน circular
+    const { hasAnySuperAdmin } = require('./users') as typeof import('./users');
+    return hasAnySuperAdmin();
+  }
+  // portable: ต้องมี password + SA file
   const pw = process.env.ADMIN_PASSWORD ?? '';
   if (!pw || pw === 'changeme') return false;
   if (!fs.existsSync(serviceAccountPath())) return false;

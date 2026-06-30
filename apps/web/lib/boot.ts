@@ -1,4 +1,4 @@
-import { activeRun, db } from './db';
+import { db } from './db';
 import { startDriveSyncNow } from './jobs/driveSync';
 import { enqueueFaceProcess } from './jobs/faceProcess';
 
@@ -10,7 +10,6 @@ export function ensureBooted() {
   const ts = () => new Date().toISOString();
 
   // 1. Reactivate archive runs ที่ถูก mark completed ทั้งที่มี pending photos
-  //    (เคสที่ server ตายระหว่าง face queue ยังไม่ drain)
   const stuck = db().prepare(`
     SELECT DISTINCT r.id FROM runs r
     JOIN photos p ON p.run_id = r.id
@@ -37,12 +36,16 @@ export function ensureBooted() {
     }
   }
 
-  // 3. Resume Live drive sync ถ้ามี
-  const run = activeRun();
-  if (run) {
-    console.log(`${ts()} [boot] resuming active live run ${run.id} folder=${run.folder_id}`);
+  // 3. Resume Live drive sync ของ "ทุก tenant" (saas รองรับหลาย live run พร้อมกัน ข้าม tenant)
+  const liveRuns = db().prepare(`
+    SELECT id, folder_id, folder_name, tenant_id FROM runs
+    WHERE mode='live' AND status='running'
+  `).all() as Array<{ id: number; folder_id: string; folder_name: string | null; tenant_id: string }>;
+  for (const run of liveRuns) {
+    console.log(`${ts()} [boot] resuming live run ${run.id} folder=${run.folder_id} tenant=${run.tenant_id}`);
     startDriveSyncNow({ runId: run.id, folderId: run.folder_id, folderName: run.folder_name });
-  } else if (stuck.length === 0 && pending.length === 0) {
+  }
+  if (liveRuns.length === 0 && stuck.length === 0 && pending.length === 0) {
     console.log(`${ts()} [boot] no active run — waiting for admin to start`);
   }
 }

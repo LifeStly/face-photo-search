@@ -4,6 +4,7 @@ import { activeRun, db } from '@/lib/db';
 import { queueStats } from '@/lib/queue';
 import { ensureBooted } from '@/lib/boot';
 import { getFolderName } from '@/lib/drive';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ function looksCorrupt(name: string | null): boolean {
   return /\?{2,}/.test(name);
 }
 
-async function resolveFolderName(folderId: string, dbName: string | null): Promise<string | null> {
+async function resolveFolderName(folderId: string, dbName: string | null, tenantId: string): Promise<string | null> {
   const cached = nameCache.get(folderId);
   if (cached) return cached;
   if (!looksCorrupt(dbName)) {
@@ -27,7 +28,7 @@ async function resolveFolderName(folderId: string, dbName: string | null): Promi
   const live = await getFolderName(folderId);
   if (live) {
     nameCache.set(folderId, live);
-    db().prepare(`UPDATE runs SET folder_name=? WHERE folder_id=?`).run(live, folderId);
+    db().prepare(`UPDATE runs SET folder_name=? WHERE tenant_id=? AND folder_id=?`).run(live, tenantId, folderId);
     return live;
   }
   return dbName;
@@ -35,9 +36,11 @@ async function resolveFolderName(folderId: string, dbName: string | null): Promi
 
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) return NextResponse.json({ error: 'no tenant' }, { status: 403 });
   ensureBooted();
-  const r = activeRun();
-  const folderName = r ? await resolveFolderName(r.folder_id, r.folder_name) : null;
+  const r = activeRun(tenantId);
+  const folderName = r ? await resolveFolderName(r.folder_id, r.folder_name, tenantId) : null;
   return NextResponse.json({
     run: r
       ? {

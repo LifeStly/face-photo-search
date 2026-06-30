@@ -3,7 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-type Status = { complete: boolean; hasServiceAccount: boolean; hasPassword: boolean; driveFolderId?: string; driveFolderName?: string };
+type Status = {
+  mode: 'portable' | 'saas';
+  complete: boolean;
+  hasServiceAccount: boolean;
+  hasPassword: boolean;
+  hasSuperAdmin: boolean;
+  driveFolderId?: string;
+  driveFolderName?: string;
+};
 type Folder = { id: string; name: string };
 
 export default function SetupPage() {
@@ -19,10 +27,14 @@ export default function SetupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // saas-only: bootstrap super-admin
+  const [suUsername, setSuUsername] = useState('');
+  const [suPassword, setSuPassword] = useState('');
 
   useEffect(() => {
     fetch('/api/setup/status').then((r) => r.json()).then((s: Status) => {
       setStatus(s);
+      if (s.mode === 'saas') return; // saas: single-step bootstrap
       if (s.hasServiceAccount) setStep((p) => Math.max(p, 2));
       if (s.hasPassword) setStep((p) => Math.max(p, 3));
       if (s.driveFolderId) {
@@ -32,6 +44,24 @@ export default function SetupPage() {
       }
     });
   }, []);
+
+  async function createSuperAdmin() {
+    setBusy(true); setError(null);
+    try {
+      const r = await fetch('/api/setup/super', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: suUsername, password: suPassword }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'create failed');
+      router.push('/admin/login');
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function uploadServiceAccount(file: File) {
     setBusy(true); setError(null);
@@ -91,6 +121,54 @@ export default function SetupPage() {
     if (m) return m[1];
     if (/^[a-zA-Z0-9_-]{20,}$/.test(url.trim())) return url.trim();
     return null;
+  }
+
+  // saas mode: one-step bootstrap super-admin
+  if (status?.mode === 'saas') {
+    if (status.hasSuperAdmin) {
+      return (
+        <section className="max-w-md mx-auto py-12 text-center">
+          <h1 className="text-2xl font-bold mb-3">ระบบพร้อมแล้ว</h1>
+          <p className="text-neutral-500 mb-6">มี super-admin อยู่ในระบบแล้ว เข้าสู่ระบบเพื่อจัดการได้เลย</p>
+          <Link href="/admin/login" className="px-6 py-3 rounded bg-brand text-white inline-block">เข้าสู่ระบบ →</Link>
+        </section>
+      );
+    }
+    return (
+      <section className="max-w-md mx-auto py-12">
+        <h1 className="text-3xl font-bold mb-2">ตั้งค่าครั้งแรก (SaaS mode)</h1>
+        <p className="text-neutral-500 mb-6">สร้าง <strong>Super-admin</strong> คนแรก — บัญชีนี้จะใช้จัดการ sub-admin ทั้งหมด</p>
+        <div className="space-y-3">
+          <input
+            type="text"
+            value={suUsername}
+            onChange={(e) => setSuUsername(e.target.value)}
+            placeholder="username (ขั้นต่ำ 3 ตัว)"
+            className="w-full px-3 py-2 rounded border border-neutral-300 dark:border-neutral-700 bg-transparent"
+            autoComplete="off"
+          />
+          <input
+            type="password"
+            value={suPassword}
+            onChange={(e) => setSuPassword(e.target.value)}
+            placeholder="รหัสผ่าน (ขั้นต่ำ 8 ตัว)"
+            className="w-full px-3 py-2 rounded border border-neutral-300 dark:border-neutral-700 bg-transparent"
+            autoComplete="new-password"
+          />
+          <button
+            onClick={createSuperAdmin}
+            disabled={busy || suUsername.length < 3 || suPassword.length < 8}
+            className="w-full px-4 py-3 rounded bg-brand text-white disabled:opacity-50"
+          >
+            {busy ? 'กำลังสร้าง...' : 'สร้าง Super-admin'}
+          </button>
+        </div>
+        <p className="text-xs text-neutral-500 mt-6">
+          ⚠ จดรหัสนี้ไว้ให้ดี — ถ้าลืมต้องเข้าฐานข้อมูลเองเพื่อ reset
+        </p>
+        {error && <div className="mt-4 p-3 rounded bg-red-100 text-red-800 text-sm">{error}</div>}
+      </section>
+    );
   }
 
   return (

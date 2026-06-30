@@ -14,21 +14,24 @@ async function runFaceProcess({ photoId, driveFileId, runId }: Args) {
 
   const MAX_ATTEMPTS = 2;
   let lastErr: any;
+  // resolve tenant ก่อนยิง Drive — ใช้ทั้ง downloadThumbnail (auth) + embeddings (scope)
+  const photoTenant = db().prepare(`SELECT tenant_id FROM photos WHERE id=?`).get(photoId) as { tenant_id: string } | undefined;
+  const tenantId = photoTenant?.tenant_id ?? 'default';
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const buf = await downloadThumbnail(driveFileId, 1920);
+      const buf = await downloadThumbnail(driveFileId, 1920, tenantId);
       const faces = await embedImage(buf);
-
       const insertEmb = db().prepare(`
-        INSERT INTO embeddings (photo_id, descriptor, box_x, box_y, box_w, box_h)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO embeddings (photo_id, descriptor, box_x, box_y, box_w, box_h, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
       const tx = db().transaction((items: typeof faces) => {
         for (const f of items) {
           insertEmb.run(
             photoId,
             serializeDescriptor(f.descriptor),
-            f.box.x, f.box.y, f.box.width, f.box.height
+            f.box.x, f.box.y, f.box.width, f.box.height,
+            tenantId
           );
         }
       });

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { db, listIgnoredFolderIds } from '@/lib/db';
-import { listFolders, getFolderName } from '@/lib/drive';
+import { listFolders } from '@/lib/drive';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,38 +25,41 @@ type FolderInfo = {
 
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) return NextResponse.json({ error: 'no tenant' }, { status: 403 });
 
-  const ignored = new Set(listIgnoredFolderIds());
+  const ignored = new Set(listIgnoredFolderIds(tenantId));
 
-  // 1) folder ที่ SA เห็นใน Drive (Shared with me)
+  // 1) folder ที่ SA/OAuth ของ tenant เห็นใน Drive (Shared with me)
   let driveFolders: Array<{ id: string; name: string }> = [];
   try {
-    const list = await listFolders();
+    const list = await listFolders(undefined, tenantId);
     driveFolders = list.map((f) => ({ id: f.id, name: f.name }));
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? String(e) }, { status: 500 });
   }
 
-  // 2) folder ที่อยู่ใน DB (มีงานเก่า/Live/Archive) — แม้ SA จะ unshare ออกแล้วก็ยังโชว์เพื่อให้กดลบได้
+  // 2) folder ที่อยู่ใน DB (มีงานเก่า/Live/Archive) ภายใน tenant นี้
   const dbFolders = db().prepare(
     `SELECT
        r.folder_id AS folderId,
        (SELECT r2.folder_name FROM runs r2
-         WHERE r2.folder_id = r.folder_id AND r2.folder_name IS NOT NULL
+         WHERE r2.tenant_id = ? AND r2.folder_id = r.folder_id AND r2.folder_name IS NOT NULL
          ORDER BY r2.started_at DESC LIMIT 1) AS storedName,
        MAX(CASE WHEN r.mode='live' AND r.status='running' THEN 1 ELSE 0 END) AS isLive,
        MAX(CASE WHEN r.mode='live' AND r.status='running' THEN 'live'
                 ELSE 'archive' END) AS mode,
        (SELECT COUNT(*) FROM photos p
          JOIN runs r2 ON r2.id = p.run_id
-         WHERE r2.folder_id = r.folder_id) AS photoCount,
+         WHERE r2.tenant_id = ? AND r2.folder_id = r.folder_id) AS photoCount,
        (SELECT COUNT(*) FROM photos p
          JOIN runs r2 ON r2.id = p.run_id
-         WHERE r2.folder_id = r.folder_id AND p.processed_at IS NOT NULL) AS processedCount,
+         WHERE r2.tenant_id = ? AND r2.folder_id = r.folder_id AND p.processed_at IS NOT NULL) AS processedCount,
        MAX(r.started_at) AS lastSyncAt
      FROM runs r
+     WHERE r.tenant_id = ?
      GROUP BY r.folder_id`
-  ).all() as Array<{
+  ).all(tenantId, tenantId, tenantId, tenantId) as Array<{
     folderId: string;
     storedName: string | null;
     isLive: number;
@@ -68,8 +72,7 @@ export async function GET() {
   const dbMap = new Map(dbFolders.map((r) => [r.folderId, r]));
   const driveMap = new Map(driveFolders.map((f) => [f.id, f.name]));
 
-  // event code lookup ต่อ folder
-  const codeRows = db().prepare(`SELECT folder_id, code, password_hash FROM event_codes`).all() as Array<{
+  const codeRows = db().prepare(`SELECT folder_id, code, password_hash FROM event_codes WHERE tenant_id = ?`).all(tenantId) as Array<{
     folder_id: string; code: string; password_hash: string | null;
   }>;
   const codeMap = new Map<string, { code: string; hasPassword: boolean }>();

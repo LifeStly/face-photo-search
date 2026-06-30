@@ -2,21 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { db, latestRunForFolder } from '@/lib/db';
 import { enqueueFaceProcess } from '@/lib/jobs/faceProcess';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export const runtime = 'nodejs';
 
-/**
- * ล้าง embeddings + reset processed/failed → re-enqueue ทุก photo ของ run
- * ใช้หลังปรับ tune face detection params (minConfidence/thumbnail size/resize)
- * Body: { folderId: string } — รับ folderId แทน runId เพื่อ caller ไม่ต้องรู้ runId
- */
 export async function POST(req: NextRequest) {
   if (!(await requireAdmin())) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) return NextResponse.json({ error: 'no tenant' }, { status: 403 });
   const body = await req.json().catch(() => ({}));
   const folderId: string | undefined = body?.folderId;
   if (!folderId) return NextResponse.json({ error: 'missing folderId' }, { status: 400 });
 
-  const run = latestRunForFolder(folderId);
+  const run = latestRunForFolder(folderId, tenantId);
   if (!run) return NextResponse.json({ error: 'no run for folder' }, { status: 404 });
 
   const photos = db()

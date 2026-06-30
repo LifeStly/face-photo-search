@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-06-30 — Phase E (SaaS edition): deploy templates สำหรับ Linux VPS
+- **เพิ่ม** `deploy/Caddyfile` — reverse proxy + Let's Encrypt auto + access log
+- **เพิ่ม** `deploy/face-photo-search.service` — systemd unit (user `facephoto`, MemoryMax 4G, security hardening)
+- **เพิ่ม** `deploy/README.md` — คู่มือ deploy ตั้งแต่ clone → Caddy → systemd → OAuth → backup + troubleshoot table
+- **แก้** `.env.example` — เอกสาร `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI`
+
+## 2026-06-30 — Phase D (SaaS edition): per-tenant Drive source + Google OAuth flow
+- **แก้** `apps/web/lib/drive.ts` — `driveFor(tenantId)` lookup `drive_sources`: SA file → `GoogleAuth`, OAuth → `OAuth2` client; cache ต่อ tenant; `resetTenantDriveClient(tenantId)` clear cache
+- **แก้** `apps/web/lib/drive.ts` — `listImagesInFolder`, `listFolders`, `getFolderName`, `downloadFile`, `downloadThumbnail` รับ `tenantId?` arg ทุกตัว → ส่ง downstream
+- **แก้** `apps/web/lib/jobs/{driveSync,faceProcess}.ts` — ส่ง `tenantId` ของ run/photo ไป Drive call
+- **แก้** event/photo file routes + admin/drive/folders — ส่ง tenantId เข้าทุก Drive call
+- **เพิ่ม** `apps/web/app/api/admin/drive-source/route.ts` GET/POST — tenant อัพ SA JSON (เก็บ `secrets/tenants/<id>/service-account.json`) + บันทึก drive_sources row
+- **เพิ่ม** `apps/web/app/api/oauth/google/start/route.ts` — สร้าง OAuth URL + state ที่ encode tenantId; บังคับ HTTPS (ยกเว้น localhost)
+- **เพิ่ม** `apps/web/app/api/oauth/google/callback/route.ts` — แลก code → tokens; เช็ค refresh_token; เก็บลง drive_sources; redirect กลับ `/admin?oauth=ok|error`
+
+## 2026-06-30 — Phase C (SaaS edition): tenant scope ใน DB helpers + admin/event routes + login UI
+- **แก้** `apps/web/lib/db.ts` — `activeRun/listPhotos/listFailedPhotos/getPhoto/allEmbeddings/dropFolderData/isIgnored/addIgnored/removeIgnored/listIgnoredFolderIds/latestRunForFolder/latestRunIdForFolder` รับ `tenantId` arg (default `'default'`); `getEventCode` คืน `tenant_id` ใน row; query filter ด้วย `tenant_id` ทุกตัว
+- **แก้** `apps/web/lib/event.ts` — `ensureEventCodeForFolder` insert `tenant_id`; `gateEvent` คืน `tenantId` ใน access; `photoBelongsToEvent` รับ `tenantId`
+- **แก้** `apps/web/lib/jobs/driveSync.ts` — INSERT photos ใส่ `tenant_id` จาก run; `getRunInfo` คืน `tenant_id`
+- **แก้** `apps/web/lib/jobs/faceProcess.ts` — INSERT embeddings ใส่ `tenant_id` จาก photo
+- **แก้** `apps/web/lib/boot.ts` — `ensureBooted` resume Live ของทุก tenant พร้อมกัน (loop runs WHERE mode='live' AND status='running')
+- **แก้** ทุก `/api/admin/*` route สำคัญ (start, status, folders/[id], folders/[id]/qr, folders/[id]/toggle-live, drive/folders, runs/{stop,sync-now,retry-failed,reprocess}, photos, photos/[id]) — resolve `tenantId` จาก `getCurrentTenantId()` → ส่งเข้า db helpers + INSERT/UPDATE/DELETE statements
+- **แก้** ทุก `/api/event/[code]/*` route — ใช้ `g.access.tenantId` จาก gateEvent + ส่งเข้า db/drive helpers
+- **แก้** `apps/web/app/admin/login/page.tsx` — โหลด `/api/setup/status` ตรวจ mode; saas → แสดง username field + redirect ตาม role (super → /super, tenant_admin → /admin)
+
+## 2026-06-30 — Phase B (SaaS edition): super-admin bootstrap + tenant CRUD API + UI
+- **แก้** `apps/web/lib/setup.ts` — `isSetupComplete()` ใน saas mode = มี super-admin (`hasAnySuperAdmin()`)
+- **แก้** `apps/web/app/api/setup/status/route.ts` — return `mode` + `hasSuperAdmin`
+- **เพิ่ม** `apps/web/app/api/setup/super/route.ts` POST — bootstrap super-admin คนแรก (one-time, generate SESSION_SECRET ถ้ายังไม่มี)
+- **แก้** `apps/web/app/setup/page.tsx` — branch ตาม mode; saas → ฟอร์มสร้าง super-admin
+- **เพิ่ม** `apps/web/lib/tenant.ts` — `deleteTenant` cascade ลบทุกตารางของ tenant; `listAuditLog`, `isTenantUsable`
+- **เพิ่ม** `apps/web/app/api/super/tenants/route.ts` GET/POST — list + create (พร้อม tenant-admin คนแรก + quota)
+- **เพิ่ม** `apps/web/app/api/super/tenants/[id]/route.ts` GET/PATCH/DELETE — read, update name/slug/status/expires, delete cascade
+- **เพิ่ม** `apps/web/app/api/super/tenants/[id]/quota/route.ts` GET/PUT
+- **เพิ่ม** `apps/web/app/api/super/tenants/[id]/usage/route.ts` GET (period selectable)
+- **เพิ่ม** `apps/web/app/api/super/audit/route.ts` GET (filter tenantId + pagination)
+- **เพิ่ม** `apps/web/app/super/page.tsx` server gate (saas + super-admin only) + `SuperPanel.tsx` client — tabs: Tenants (list/create/edit/delete + expandable quota+usage) / Audit Log
+- **แก้** `apps/web/app/globals.css` — `.input` component class
+- **แก้** `apps/web/app/api/admin/login/route.ts` — saas: รับ `{username,password}` → `verifyLogin` → session+audit
+
+## 2026-06-30 — Phase A (SaaS edition): dual-mode flag + multi-tenant DB schema + auth/session reshape
+- **เพิ่ม** `APP_MODE` env (`portable` default | `saas`) ใน `apps/web/lib/config.ts` + `.env.example` — กำหนดโหมดของระบบเดียวกัน
+- **เพิ่ม** ตาราง 6 ตัวใน `apps/web/lib/db.ts` schema: `tenants`, `users`, `drive_sources`, `quotas`, `usage_counters`, `audit_log` พร้อม index
+- **เพิ่ม** column `tenant_id` ในตารางเดิม: `runs`, `photos`, `embeddings`, `event_codes`, `ignored_folders` (`NOT NULL DEFAULT 'default'`); `settings.tenant_id` (nullable = global)
+- **เพิ่ม** migration `addTenantIdIfMissing()` + `seedDefaultTenant()` — DB เก่าจะถูก ALTER ADD ทีละตาราง, ทุก row ตั้ง `'default'`, สร้าง row `tenants(id='default', name='Default', slug='default')` กัน FK violation
+- **เพิ่ม** `apps/web/lib/users.ts` — bcrypt CRUD users + `verifyLogin()` + `hasAnySuperAdmin()` (เตรียมไว้ Phase B)
+- **เพิ่ม** `apps/web/lib/tenant.ts` — `listTenants/getTenant/createTenant/updateTenant/deleteTenant`, `getDriveSourceForTenant/upsertDriveSource`, `getQuota/setQuota/getUsage/incrementUsage`, `logAudit`, `getCurrentTenantId/assertTenantAccess`
+- **แก้** `apps/web/lib/auth.ts` — Session shape เพิ่ม `userId/tenantId/role`; เพิ่ม `requireSuperAdmin()`, `requireTenantAdmin()` คง `requireAdmin()` เดิมสำหรับ backward-compat
+- **แก้** `apps/web/app/api/admin/login/route.ts` — portable: set `userId='portable-admin'`, `tenantId='default'`, `role='tenant_admin'`; saas: รับ `username+password`, เทียบ users table, set session ตาม role; เขียน audit log
+- **หมายเหตุ** Phase A ทำเฉพาะ DB + auth skeleton ยังไม่มี UI super-admin/tenant-admin (Phase B/C) — portable mode ยังทำงานเหมือนเดิมทุกอย่าง
+
 ## 2026-06-30 — แยก role nav ใน header: guest 2 เมนู / admin 3 เมนู + ยุบ admin tabs จาก 5 → 3
 - **แก้** `apps/web/app/components/Header.tsx` — เพิ่ม `isAdminScope` (path `/admin/*` ยกเว้น `/admin/login`); render 3 modes:
   - Admin: nav 3 เมนู (Folders / ภาพ / ตั้งค่า) + badge "ADMIN" ติด brand + ปุ่ม logout icon — link ไป `?tab=` query ของ AdminPanel

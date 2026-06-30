@@ -14,8 +14,8 @@ export async function GET(_req: NextRequest, { params }: { params: { code: strin
   if (!ev) return NextResponse.json({ error: 'invalid code' }, { status: 404 });
 
   const row = db()
-    .prepare(`SELECT folder_name FROM runs WHERE folder_id=? ORDER BY started_at DESC LIMIT 1`)
-    .get(ev.folder_id) as { folder_name: string | null } | undefined;
+    .prepare(`SELECT folder_name FROM runs WHERE tenant_id=? AND folder_id=? ORDER BY started_at DESC LIMIT 1`)
+    .get(ev.tenant_id, ev.folder_id) as { folder_name: string | null } | undefined;
 
   const authed = await isEventAuthed(params.code);
 

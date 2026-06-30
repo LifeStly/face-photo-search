@@ -1,0 +1,30 @@
+[Unit]
+Description=Face Photo Search (Next.js, SaaS mode)
+After=network.target
+
+[Service]
+Type=simple
+User=facephoto
+WorkingDirectory=/opt/face-photo-search
+Environment=NODE_ENV=production
+Environment=APP_MODE=saas
+EnvironmentFile=/opt/face-photo-search/.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/face-photo-search.log
+StandardError=append:/var/log/face-photo-search.log
+
+# resource guards (face recognition ใช้ CPU/RAM หนัก)
+MemoryMax=4G
+TasksMax=512
+
+# security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/face-photo-search/data /opt/face-photo-search/secrets /var/log
+
+[Install]
+WantedBy=multi-user.target
